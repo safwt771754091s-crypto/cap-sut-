@@ -69,7 +69,14 @@ mod tests {
     #[test]
     fn duplicate_split_id_is_rejected() {
         let mut p = project();
-        split_clip(&mut p, "v1", "c1", 3.0).unwrap();
-        assert_eq!(split_clip(&mut p, "v1", "c1", 2.0), Err(EditError::InvalidOperation));
+        let duplicate = p.timeline.tracks[0].clips[0].clone();
+        let mut duplicate = duplicate;
+        duplicate.id = "c1-split".into();
+        p.timeline.tracks[0].clips.push(duplicate);
+
+        assert_eq!(
+            split_clip(&mut p, "v1", "c1", 3.0),
+            Err(EditError::InvalidOperation)
+        );
     }
 }
