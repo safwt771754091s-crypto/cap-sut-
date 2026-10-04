@@ -1,0 +1,9 @@
+[package]
+name = "capsut-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+capsut-core = { path = "../core" }
+serde.workspace = true
