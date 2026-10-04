@@ -111,7 +111,7 @@ fn ensure_success(status: ExitStatus, output: &Path) -> Result<RenderArtifact, R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use capsut_core::{AssetRef, ProjectInfo, RationalFrameRate, Timeline, Track};
+    use capsut_core::{AssetRef, Clip, ProjectInfo, RationalFrameRate, Timeline, Track};
 
     fn project() -> Project {
         Project {
