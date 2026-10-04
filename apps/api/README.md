@@ -1,12 +1,29 @@
-# Developer API
+# Cap sut API
 
-Planned stable surface:
+The API is the HTTP entry point to the shared Cap sut rendering engine.
 
-GET /health
-POST /v1/projects
-GET /v1/projects/:id
-POST /v1/render-jobs
-GET /v1/render-jobs/:id
-POST /v1/render-jobs/:id/cancel
+## Endpoints
 
-Production requirements: authentication, authorization, schema validation, idempotency keys, quotas, payload limits, audit logging and secret redaction.
+### Health
+`GET /health`
+
+### Render
+`POST /v1/renders`
+
+Request:
+```json
+{
+  "project": { "...": "canonical Cap sut Project JSON" },
+  "format": "mp4"
+}
+```
+
+The API validates the canonical project, creates the same `RenderPlan` used by the CLI, executes FFmpeg, and returns the generated MP4 artifact.
+
+## Configuration
+
+- `CAPSUT_API_PORT` — default `8080`
+- `CAPSUT_FFMPEG` — default `ffmpeg`
+- `CAPSUT_OUTPUT_DIR` — default system temp directory `capsut-renders`
+
+The initial API is synchronous by design. A persistent asynchronous job queue and status store will be added after the core render contract is stable.
