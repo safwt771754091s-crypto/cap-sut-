@@ -94,6 +94,8 @@ impl Project {
     }
 }
 
+pub mod operations;
+
 #[cfg(test)]
 mod tests {
     use super::*;
