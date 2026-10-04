@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod schema;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RationalFrameRate {
     pub numerator: u32,
@@ -62,11 +64,15 @@ pub enum ValidationError {
     InvalidClipRange,
     MissingAsset(String),
     InvalidTrackKind(String),
+    UnsupportedSchemaVersion(String),
 }
 
 impl Project {
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
+        if !schema::is_supported_schema_version(&self.schema_version) {
+            errors.push(ValidationError::UnsupportedSchemaVersion(self.schema_version.clone()));
+        }
         if self.project.id.is_empty() { errors.push(ValidationError::EmptyId("project")); }
         if self.project.width == 0 || self.project.height == 0 { errors.push(ValidationError::InvalidDimensions); }
         if self.project.frame_rate.numerator == 0 || self.project.frame_rate.denominator == 0 { errors.push(ValidationError::InvalidFrameRate); }
@@ -102,7 +108,7 @@ mod tests {
 
     fn fixture() -> Project {
         Project {
-            schema_version: "0.1.0".into(),
+            schema_version: schema::CURRENT_SCHEMA_VERSION.into(),
             project: ProjectInfo { id: "p1".into(), name: "Test".into(), width: 1920, height: 1080, frame_rate: RationalFrameRate { numerator: 30, denominator: 1 } },
             assets: vec![AssetRef { id: "a1".into(), uri: "file:///video.mp4".into(), mime_type: "video/mp4".into(), duration_seconds: Some(10.0) }],
             timeline: Timeline { duration_seconds: 5.0, tracks: vec![Track { id: "t1".into(), kind: "video".into(), clips: vec![Clip { id: "c1".into(), asset_id: "a1".into(), timeline_start_seconds: 0.0, source_in_seconds: 0.0, source_out_seconds: 5.0 }] }] },
@@ -118,5 +124,11 @@ mod tests {
         p.timeline.tracks[0].clips[0].asset_id = "missing".into();
         assert!(p.validate().is_err());
     }
-}
 
+    #[test]
+    fn unsupported_schema_fails() {
+        let mut p = fixture();
+        p.schema_version = "9.9.9".into();
+        assert!(p.validate().is_err());
+    }
+}
