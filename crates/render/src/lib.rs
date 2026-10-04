@@ -134,6 +134,9 @@ mod tests {
         assert!(plan.args.contains(&"2".into()));
         assert!(plan.args.contains(&"-i".into()));
         assert!(!plan.args.join(" ").contains("&&"));
+        let vf = plan.args.iter().position(|arg| arg == "-vf").map(|i| plan.args[i + 1].clone()).unwrap();
+        assert_eq!(vf, "scale=1280:720:force_original_aspect_ratio=decrease,pad=width=1280:height=720:x=(ow-iw)/2:y=(oh-ih)/2");
+        assert!(!vf.contains("1280x720"));
     }
 
     #[test]
