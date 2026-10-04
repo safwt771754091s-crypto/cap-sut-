@@ -85,13 +85,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/health
       - name: Render through Cap sut HTTP API
         run: |
-          response="$(python3 - <<'PY' | curl -fsS -X POST http://127.0.0.1:8080/v1/renders -H 'Content-Type: application/json' --data-binary @-
-import json
-with open("/tmp/capsut-project.json") as f:
-    project = json.load(f)
-print(json.dumps({"project": project, "format": "mp4"}))
-PY
-          )"
+          response="$(python3 -c 'import json; p=json.load(open("/tmp/capsut-project.json")); print(json.dumps({"project": p, "format": "mp4"}))' | curl -fsS -X POST http://127.0.0.1:8080/v1/renders -H 'Content-Type: application/json' --data-binary @-)"
           echo "$response"
           python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] is True; assert d["artifact"]["mime_type"] == "video/mp4"; assert d["artifact"]["size_bytes"] > 0; print("HTTP render response validated")' <<< "$response"
           job_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$response")"
