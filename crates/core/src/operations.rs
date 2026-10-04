@@ -70,6 +70,6 @@ mod tests {
     fn duplicate_split_id_is_rejected() {
         let mut p = project();
         split_clip(&mut p, "v1", "c1", 3.0).unwrap();
-        assert_eq!(split_clip(&mut p, "v1", "c1", 4.0), Err(EditError::InvalidOperation));
+        assert_eq!(split_clip(&mut p, "v1", "c1", 2.0), Err(EditError::InvalidOperation));
     }
 }
