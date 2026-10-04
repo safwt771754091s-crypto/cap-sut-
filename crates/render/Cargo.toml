@@ -6,4 +6,6 @@ license.workspace = true
 
 [dependencies]
 capsut-core = { path = "../core" }
+capsut-media = { path = "../media" }
 serde.workspace = true
+serde_json.workspace = true
