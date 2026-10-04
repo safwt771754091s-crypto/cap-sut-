@@ -28,12 +28,8 @@ jobs:
           fi
       - name: Generate deterministic input MP4
         run: |
-          ffmpeg -hide_banner -loglevel error -y \
-            -f lavfi -i color=c=black:s=1280x720:r=30:d=2 \
-            -f lavfi -i anullsrc=r=48000:cl=stereo \
-            -t 2 -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac \
-            /tmp/capsut-input.mp4
-      - name: Render through Cap sut
+          ffmpeg -hide_banner -loglevel error -y             -f lavfi -i color=c=black:s=1280x720:r=30:d=2             -f lavfi -i anullsrc=r=48000:cl=stereo             -t 2 -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac             /tmp/capsut-input.mp4
+      - name: Render through Cap sut CLI
         run: |
           cat > /tmp/capsut-project.json <<'JSON'
           {
@@ -70,3 +66,37 @@ jobs:
           cargo run -p capsut-render --bin capsut-render -- /tmp/capsut-project.json /tmp/capsut-output.mp4
           test -s /tmp/capsut-output.mp4
           ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 /tmp/capsut-output.mp4
+      - name: Start Cap sut HTTP API
+        env:
+          CAPSUT_API_PORT: "8080"
+          CAPSUT_FFMPEG: ffmpeg
+          CAPSUT_OUTPUT_DIR: /tmp/capsut-api-renders
+        run: |
+          mkdir -p /tmp/capsut-api-renders
+          cargo run -p capsut-api > /tmp/capsut-api.log 2>&1 &
+          echo $! > /tmp/capsut-api.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8080/health; then
+              echo
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/health
+      - name: Render through Cap sut HTTP API
+        run: |
+          response="$(curl -fsS -X POST http://127.0.0.1:8080/v1/renders             -H 'Content-Type: application/json'             --data-binary @/tmp/capsut-project.json)"
+          echo "$response"
+          python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] is True; assert d["artifact"]["mime_type"] == "video/mp4"; assert d["artifact"]["size_bytes"] > 0; print("HTTP render response validated")' <<< "$response"
+          job_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$response")"
+          test -s "/tmp/capsut-api-renders/$job_id.mp4"
+          ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "/tmp/capsut-api-renders/$job_id.mp4"
+      - name: Stop Cap sut HTTP API
+        if: always()
+        run: |
+          if [ -f /tmp/capsut-api.pid ]; then
+            kill "$(cat /tmp/capsut-api.pid)" || true
+          fi
+          if [ -f /tmp/capsut-api.log ]; then
+            cat /tmp/capsut-api.log
+          fi
