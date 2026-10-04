@@ -1,4 +1,4 @@
-use capsut_core::{Clip, Project};
+use capsut_core::Project;
 use capsut_media::local_media_path;
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, process::{Command, ExitStatus}};
@@ -52,7 +52,8 @@ pub fn build_render_plan(request: &RenderRequest, ffmpeg_bin: impl Into<PathBuf>
     if output.as_os_str().is_empty() { return Err("output is required".into()); }
     let duration = clip.source_out_seconds - clip.source_in_seconds;
     let fps = format!("{}/{}", request.project.project.frame_rate.numerator, request.project.project.frame_rate.denominator);
-    let size = format!("{}x{}", request.project.project.width, request.project.project.height);
+    let width = request.project.project.width;
+    let height = request.project.project.height;
 
     let args = vec![
         "-hide_banner".into(),
@@ -63,7 +64,7 @@ pub fn build_render_plan(request: &RenderRequest, ffmpeg_bin: impl Into<PathBuf>
         "-t".into(), duration.to_string(),
         "-map".into(), "0:v:0".into(),
         "-map".into(), "0:a:0?".into(),
-        "-vf".into(), format!("scale={size}:force_original_aspect_ratio=decrease,pad={size}:(ow-iw)/2:(oh-ih)/2"),
+        "-vf".into(), format!("scale={width}:{height}:force_original_aspect_ratio=decrease,pad=width={width}:height={height}:x=(ow-iw)/2:y=(oh-ih)/2"),
         "-r".into(), fps,
         "-c:v".into(), "libx264".into(),
         "-pix_fmt".into(), "yuv420p".into(),
