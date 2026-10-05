@@ -124,7 +124,7 @@ async fn upload_asset(
         .unwrap_or("bin")
         .to_owned();
 
-    let asset_id = format!("asset-{}", unique_suffix());
+    let mime_type = if provided_mime == "application/octet-stream" {\n        mime_type_from_extension(&extension)\n    } else {\n        provided_mime\n    };\n\n    let asset_id = format!("asset-{}", unique_suffix());
     let file_name = format!("{asset_id}.{extension}");
     let path = state.asset_dir.join(&file_name);
 
