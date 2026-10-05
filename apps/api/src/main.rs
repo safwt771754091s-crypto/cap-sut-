@@ -1,6 +1,10 @@
 use axum::{
-    extract::{Multipart, State},
-    http::StatusCode,
+    body::Body,
+    extract::{Multipart, Path, State},
+    http::{
+        header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE},
+        Response, StatusCode,
+    },
     routing::{get, post},
     Json, Router,
 };
@@ -81,6 +85,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/v1/assets", post(upload_asset))
         .route("/v1/renders", post(create_render))
+        .route("/v1/renders/:job_id/download", get(download_render))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -212,6 +217,41 @@ async fn create_render(
             artifact,
         }),
     ))
+}
+
+async fn download_render(
+    State(state): State<Arc<AppState>>,
+    Path(job_id): Path<String>,
+) -> Result<Response<Body>, StatusCode> {
+    if !job_id.starts_with("render-")
+        || !job_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let path = state.output_dir.join(format!("{job_id}.mp4"));
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "video/mp4")
+        .header(CONTENT_LENGTH, bytes.len())
+        .header(
+            CONTENT_DISPOSITION,
+            format!("attachment; filename="{job_id}.mp4""),
+        )
+        .body(Body::from(bytes))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(response)
 }
 
 fn api_error(error: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
