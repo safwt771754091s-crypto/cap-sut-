@@ -4,6 +4,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use tower_http::cors::CorsLayer;
 use capsut_core::Project;
 use capsut_render::{build_render_plan, execute_render, RenderRequest};
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/v1/assets", post(upload_asset))
         .route("/v1/renders", post(create_render))
+        .layer(CorsLayer::permissive())
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
