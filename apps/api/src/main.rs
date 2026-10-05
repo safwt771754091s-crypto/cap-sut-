@@ -246,7 +246,7 @@ async fn download_render(
         .header(CONTENT_LENGTH, bytes.len())
         .header(
             CONTENT_DISPOSITION,
-            format!("attachment; filename="{job_id}.mp4""),
+            format!("attachment; filename=\"{job_id}.mp4\""),
         )
         .body(Body::from(bytes))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
