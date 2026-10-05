@@ -7,7 +7,7 @@ const state = {
   },
   selectedTrack: null,
   selectedClip: null,
-  previewUrl: null
+  apiUrl: localStorage.getItem("capsut.apiUrl") || "http://localhost:8080"
 };
 
 const app = document.querySelector("#app");
@@ -42,7 +42,8 @@ function render() {
           Import media
           <input id="media" type="file" accept="video/*,audio/*,image/*" multiple>
         </label>
-        <div id="asset-list">${state.project.assets.map(a => '<div class="asset" title="'+a.name+'">'+a.name+'</div>').join("")}</div>
+        <div class="asset-api">API: ${escapeHtml(state.apiUrl)}</div>
+        <div id="asset-list">${state.project.assets.map(a => '<div class="asset" title="'+escapeHtml(a.name)+'">'+escapeHtml(a.name)+'</div>').join("")}</div>
       </aside>
       <section class="center">
         <div class="preview-wrap">
@@ -60,7 +61,7 @@ function render() {
             <span class="track-label">Video</span>
             <div class="clips">${clips.map(c => `
               <button class="clip ${selected === c.id ? "selected" : ""}" data-clip="${c.id}" style="width:${Math.max(120, c.timeline_duration * 90)}px">
-                ${assetName(c.asset_id)}
+                ${escapeHtml(assetName(c.asset_id))}
               </button>`).join("")}</div>
           </div>
         </div>
@@ -72,6 +73,10 @@ function render() {
     </main>
   `;
   bind();
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
 }
 
 function assetName(id) {
@@ -127,15 +132,15 @@ async function importFile(file) {
     asset.duration_seconds = Number.isFinite(probe.duration) ? probe.duration : 0;
     if (file.type.startsWith("video/")) {
       try {
-        const endpoint = prompt("Cap sut API URL", "http://localhost:8080");
-        if (!endpoint) throw new Error("API URL is required for server export");
+        const base = getApiUrl();
         const form = new FormData();
         form.append("media", file, file.name);
-        const response = await fetch(endpoint.replace(/\/$/, "") + "/v1/assets", { method: "POST", body: form });
+        const response = await fetch(base + "/v1/assets", { method: "POST", body: form });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Media upload failed");
         asset.server_uri = body.uri;
-        asset.uri = body.uri;
+        asset.uri = url;
+        asset.mime_type = body.mime_type || asset.mime_type;
       } catch (error) {
         alert("Media upload failed: " + error.message);
         return;
@@ -149,6 +154,14 @@ async function importFile(file) {
     render();
   };
   probe.load();
+}
+
+function getApiUrl() {
+  const value = window.prompt("Cap sut API URL", state.apiUrl);
+  if (!value) throw new Error("API URL is required");
+  state.apiUrl = value.replace(/\/$/, "");
+  localStorage.setItem("capsut.apiUrl", state.apiUrl);
+  return state.apiUrl;
 }
 
 function updateClip(key,value) {
@@ -229,16 +242,24 @@ function openProject() {
 }
 
 async function exportProject() {
-  const endpoint = prompt("Cap sut API URL", "http://localhost:8080/v1/renders");
-  if (!endpoint) return;
+  const base = getApiUrl();
   const renderProject = structuredClone(state.project);
   for (const asset of renderProject.assets) {
     if (asset.server_uri) asset.uri = asset.server_uri;
   }
-  const response = await fetch(endpoint, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:renderProject,format:"mp4"})});
+  const response = await fetch(base + "/v1/renders", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:renderProject,format:"mp4"})});
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Render failed");
-  alert("Render complete: " + body.artifact.uri);
+  const downloadUrl = base + "/v1/renders/" + encodeURIComponent(body.job_id) + "/download";
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = body.job_id + ".mp4";
+  link.textContent = "Download rendered MP4";
+  link.target = "_blank";
+  link.style.display = "inline-block";
+  link.style.margin = "12px";
+  link.click();
+  alert("Render complete. MP4 download started.");
 }
 
 render();
