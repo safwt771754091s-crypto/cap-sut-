@@ -121,7 +121,8 @@ async fn upload_asset(
         .extension()
         .and_then(|x| x.to_str())
         .filter(|x| x.len() <= 12)
-        .unwrap_or("bin");
+        .unwrap_or("bin")
+        .to_owned();
 
     let asset_id = format!("asset-{}", unique_suffix());
     let file_name = format!("{asset_id}.{extension}");
