@@ -131,7 +131,7 @@ async function importFile(file) {
         if (!endpoint) throw new Error("API URL is required for server export");
         const form = new FormData();
         form.append("media", file, file.name);
-        const response = await fetch(endpoint.replace(/\\/$/, "") + "/v1/assets", { method: "POST", body: form });
+        const response = await fetch(endpoint.replace(/\/$/, "") + "/v1/assets", { method: "POST", body: form });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Media upload failed");
         asset.server_uri = body.uri;
