@@ -1,7 +1,7 @@
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, State},
     http::{header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE}, StatusCode},
-    response::{IntoResponse, Json, Response},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
@@ -74,11 +74,7 @@ async fn main() {
     tokio::fs::create_dir_all(&output_dir).await.expect("create output dir");
     tokio::fs::create_dir_all(&asset_dir).await.expect("create asset dir");
 
-    let state = Arc::new(AppState {
-        ffmpeg_bin,
-        output_dir,
-        asset_dir,
-    });
+    let state = Arc::new(AppState { ffmpeg_bin, output_dir, asset_dir });
 
     let app = Router::new()
         .route("/health", get(health))
@@ -93,37 +89,25 @@ async fn main() {
         .await
         .expect("bind API listener");
 
-    println!("Cap sut API listening on {listener_addr}", listener_addr = listener.local_addr().unwrap());
-
+    println!("Cap sut API listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.expect("serve API");
 }
 
 async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        ok: true,
-        service: "capsut-api",
-    })
+    Json(HealthResponse { ok: true, service: "capsut-api" })
 }
 
 async fn upload_asset(
     State(state): State<Arc<AppState>>,
     mut multipart: Multipart,
 ) -> Result<Json<AssetResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let field = multipart
-        .next_field()
-        .await
+    let field = multipart.next_field().await
         .map_err(|e| api_error(e.to_string()))?
         .ok_or_else(|| api_error("missing multipart file"))?;
 
     let original_name = field.file_name().unwrap_or("asset").to_string();
-    let mut mime_type = field
-        .content_type()
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    let bytes = field
-        .bytes()
-        .await
-        .map_err(|e| api_error(e.to_string()))?;
+    let mut mime_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+    let bytes = field.bytes().await.map_err(|e| api_error(e.to_string()))?;
 
     if mime_type == "application/octet-stream" {
         mime_type = mime_from_extension(&original_name).to_string();
@@ -135,8 +119,7 @@ async fn upload_asset(
         .and_then(|v| v.to_str())
         .filter(|v| !v.is_empty())
         .unwrap_or("bin");
-    let file_name = format!("{asset_id}.{extension}");
-    let path = state.asset_dir.join(&file_name);
+    let path = state.asset_dir.join(format!("{asset_id}.{extension}"));
 
     tokio::fs::write(&path, &bytes)
         .await
@@ -158,32 +141,24 @@ async fn create_render(
 ) -> Result<(StatusCode, Json<RenderResponse>), (StatusCode, Json<ErrorResponse>)> {
     let job_id = format!("render-{}", unique_suffix());
     let format = envelope.format.unwrap_or_else(|| "mp4".to_string());
-    let request = RenderRequest {
-        job_id: job_id.clone(),
-        project: envelope.project,
-        format,
-    };
-
-    let plan = build_render_plan(&request, &state.ffmpeg_bin)
-        .map_err(|e| api_error(e.to_string()))?;
+    let request = RenderRequest { job_id: job_id.clone(), project: envelope.project, format };
     let output = state.output_dir.join(format!("{job_id}.mp4"));
-    let plan = plan.with_output(output.clone());
+
+    let plan = build_render_plan(&request, &state.ffmpeg_bin, &output)
+        .map_err(|e| api_error(e.to_string()))?;
 
     let artifact = tokio::task::spawn_blocking(move || execute_render(&plan))
         .await
         .map_err(|e| api_error(e.to_string()))?
         .map_err(|e| api_error(e.to_string()))?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(RenderResponse {
-            ok: true,
-            job_id,
-            uri: artifact.uri,
-            mime_type: artifact.mime_type,
-            size_bytes: artifact.size_bytes,
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(RenderResponse {
+        ok: true,
+        job_id,
+        uri: artifact.uri,
+        mime_type: artifact.mime_type,
+        size_bytes: artifact.size_bytes,
+    })))
 }
 
 async fn download_render(
@@ -191,21 +166,19 @@ async fn download_render(
     Path(job_id): Path<String>,
 ) -> Result<Response, StatusCode> {
     if !job_id.starts_with("render-")
-        || !job_id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        || !job_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     {
         return Err(StatusCode::BAD_REQUEST);
     }
 
     let path = state.output_dir.join(format!("{job_id}.mp4"));
-    let bytes = tokio::fs::read(&path)
-        .await
-        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
+    let bytes = tokio::fs::read(&path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
             StatusCode::NOT_FOUND
         } else {
             StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        }
+    })?;
 
     Response::builder()
         .status(StatusCode::OK)
@@ -213,37 +186,24 @@ async fn download_render(
         .header(CONTENT_LENGTH, bytes.len())
         .header(
             CONTENT_DISPOSITION,
-            format!("attachment; filename=\\\"{job_id}.mp4\\\""),
+            format!("attachment; filename=\"{job_id}.mp4\""),
         )
         .body(axum::body::Body::from(bytes))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn api_error(error: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse {
-            ok: false,
-            error: error.into(),
-        }),
-    )
+    (StatusCode::BAD_REQUEST, Json(ErrorResponse { ok: false, error: error.into() }))
 }
 
 fn unique_suffix() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    SystemTime::now().duration_since(UNIX_EPOCH)
         .expect("system clock before unix epoch")
-        .as_nanos()
-        .to_string()
+        .as_nanos().to_string()
 }
 
 fn mime_from_extension(name: &str) -> &'static str {
-    match FsPath::new(name)
-        .extension()
-        .and_then(|v| v.to_str())
-        .map(|v| v.to_ascii_lowercase())
-        .as_deref()
-    {
+    match FsPath::new(name).extension().and_then(|v| v.to_str()).map(|v| v.to_ascii_lowercase()).as_deref() {
         Some("mp4") => "video/mp4",
         Some("webm") => "video/webm",
         Some("mov") => "video/quicktime",
@@ -257,17 +217,6 @@ fn mime_from_extension(name: &str) -> &'static str {
         Some("gif") => "image/gif",
         Some("svg") => "image/svg+xml",
         _ => "application/octet-stream",
-    }
-}
-
-trait RenderPlanOutput {
-    fn with_output(self, output: PathBuf) -> Self;
-}
-
-impl RenderPlanOutput for capsut_render::RenderPlan {
-    fn with_output(mut self, output: PathBuf) -> Self {
-        self.output = output;
-        self
     }
 }
 
