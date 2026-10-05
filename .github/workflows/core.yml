@@ -71,8 +71,9 @@ jobs:
           CAPSUT_API_PORT: "8080"
           CAPSUT_FFMPEG: ffmpeg
           CAPSUT_OUTPUT_DIR: /tmp/capsut-api-renders
+          CAPSUT_ASSET_DIR: /tmp/capsut-api-assets
         run: |
-          mkdir -p /tmp/capsut-api-renders
+          mkdir -p /tmp/capsut-api-renders /tmp/capsut-api-assets
           cargo run -p capsut-api > /tmp/capsut-api.log 2>&1 &
           echo $! > /tmp/capsut-api.pid
           for i in {1..30}; do
@@ -83,9 +84,17 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8080/health
+      - name: Upload media through Cap sut HTTP API
+        run: |
+          curl -fsS -X POST http://127.0.0.1:8080/v1/assets \
+            -F "media=@/tmp/capsut-input.mp4" \
+            > /tmp/capsut-asset.json
+          cat /tmp/capsut-asset.json
+          python3 -c 'import json; d=json.load(open("/tmp/capsut-asset.json")); assert d["ok"] is True; assert d["size_bytes"] > 0; assert d["mime_type"] == "video/mp4"; print("HTTP asset upload validated")'
+          python3 -c 'import json; p=json.load(open("/tmp/capsut-project.json")); a=json.load(open("/tmp/capsut-asset.json")); p["assets"][0]["uri"]=a["uri"]; open("/tmp/capsut-uploaded-project.json","w").write(json.dumps(p))'
       - name: Render through Cap sut HTTP API
         run: |
-          response="$(python3 -c 'import json; p=json.load(open("/tmp/capsut-project.json")); print(json.dumps({"project": p, "format": "mp4"}))' | curl -fsS -X POST http://127.0.0.1:8080/v1/renders -H 'Content-Type: application/json' --data-binary @-)"
+          response="$(python3 -c 'import json; p=json.load(open("/tmp/capsut-uploaded-project.json")); print(json.dumps({"project": p, "format": "mp4"}))' | curl -fsS -X POST http://127.0.0.1:8080/v1/renders -H 'Content-Type: application/json' --data-binary @-)"
           echo "$response"
           python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] is True; assert d["artifact"]["mime_type"] == "video/mp4"; assert d["artifact"]["size_bytes"] > 0; print("HTTP render response validated")' <<< "$response"
           job_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$response")"
