@@ -85,7 +85,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/v1/assets", post(upload_asset))
         .route("/v1/renders", post(create_render))
-        .route("/v1/renders/:job_id/download", get(download_render))
+        .route("/v1/renders/{job_id}/download", get(download_render))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
