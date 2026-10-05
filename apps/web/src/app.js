@@ -113,18 +113,34 @@ function bind() {
   refreshPreview();
 }
 
-function importFile(file) {
+async function importFile(file) {
   const id = crypto.randomUUID();
   const url = URL.createObjectURL(file);
-  const asset = { id, name: file.name, uri: url, mime_type: file.type || "application/octet-stream", duration_seconds: 0 };
+  const asset = { id, name: file.name, uri: url, server_uri: null, mime_type: file.type || "application/octet-stream", duration_seconds: 0 };
   state.project.assets.push(asset);
   const track = ensureVideoTrack();
   const clip = { id: crypto.randomUUID(), asset_id: id, timeline_start_seconds: state.project.timeline.duration_seconds, source_in_seconds: 0, source_out_seconds: 0, timeline_duration: 0 };
   const probe = document.createElement(file.type.startsWith("audio/") ? "audio" : "video");
   probe.preload = "metadata";
   probe.src = url;
-  probe.onloadedmetadata = () => {
+  probe.onloadedmetadata = async () => {
     asset.duration_seconds = Number.isFinite(probe.duration) ? probe.duration : 0;
+    if (file.type.startsWith("video/")) {
+      try {
+        const endpoint = prompt("Cap sut API URL", "http://localhost:8080");
+        if (!endpoint) throw new Error("API URL is required for server export");
+        const form = new FormData();
+        form.append("media", file, file.name);
+        const response = await fetch(endpoint.replace(/\\/$/, "") + "/v1/assets", { method: "POST", body: form });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Media upload failed");
+        asset.server_uri = body.uri;
+        asset.uri = body.uri;
+      } catch (error) {
+        alert("Media upload failed: " + error.message);
+        return;
+      }
+    }
     clip.source_out_seconds = asset.duration_seconds;
     clip.timeline_duration = asset.duration_seconds;
     state.project.timeline.duration_seconds += asset.duration_seconds;
@@ -215,6 +231,9 @@ function openProject() {
 async function exportProject() {
   const endpoint = prompt("Cap sut API URL", "http://localhost:8080/v1/renders");
   if (!endpoint) return;
+  for (const asset of state.project.assets) {
+    if (asset.server_uri) asset.uri = asset.server_uri;
+  }
   const response = await fetch(endpoint, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:state.project,format:"mp4"})});
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Render failed");
