@@ -42,7 +42,7 @@ function render() {
           Import media
           <input id="media" type="file" accept="video/*,audio/*,image/*" multiple>
         </label>
-        <div id="asset-list"></div>
+        <div id="asset-list">${state.project.assets.map(a => '<div class="asset" title="'+a.name+'">'+a.name+'</div>').join("")}</div>
       </aside>
       <section class="center">
         <div class="preview-wrap">
