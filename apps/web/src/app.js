@@ -231,10 +231,11 @@ function openProject() {
 async function exportProject() {
   const endpoint = prompt("Cap sut API URL", "http://localhost:8080/v1/renders");
   if (!endpoint) return;
-  for (const asset of state.project.assets) {
+  const renderProject = structuredClone(state.project);
+  for (const asset of renderProject.assets) {
     if (asset.server_uri) asset.uri = asset.server_uri;
   }
-  const response = await fetch(endpoint, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:state.project,format:"mp4"})});
+  const response = await fetch(endpoint, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:renderProject,format:"mp4"})});
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Render failed");
   alert("Render complete: " + body.artifact.uri);
