@@ -112,7 +112,7 @@ async fn upload_asset(
         .file_name()
         .map(str::to_owned)
         .unwrap_or_else(|| "upload.bin".into());
-    let mime_type = field
+    let provided_mime = field
         .content_type()
         .map(str::to_owned)
         .unwrap_or_else(|| "application/octet-stream".into());
@@ -124,7 +124,13 @@ async fn upload_asset(
         .unwrap_or("bin")
         .to_owned();
 
-    let mime_type = if provided_mime == "application/octet-stream" {\n        mime_type_from_extension(&extension)\n    } else {\n        provided_mime\n    };\n\n    let asset_id = format!("asset-{}", unique_suffix());
+    let mime_type = if provided_mime == "application/octet-stream" {
+        mime_type_from_extension(&extension)
+    } else {
+        provided_mime
+    };
+
+    let asset_id = format!("asset-{}", unique_suffix());
     let file_name = format!("{asset_id}.{extension}");
     let path = state.asset_dir.join(&file_name);
 
@@ -155,6 +161,25 @@ async fn upload_asset(
             size_bytes: bytes.len() as u64,
         }),
     ))
+}
+
+fn mime_type_from_extension(extension: &str) -> String {
+    match extension.to_ascii_lowercase().as_str() {
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "mkv" => "video/x-matroska",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "m4a" => "audio/mp4",
+        "ogg" => "audio/ogg",
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        _ => "application/octet-stream",
+    }
+    .to_owned()
 }
 
 async fn create_render(
