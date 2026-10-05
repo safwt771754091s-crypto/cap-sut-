@@ -86,9 +86,7 @@ jobs:
           curl -fsS http://127.0.0.1:8080/health
       - name: Upload media through Cap sut HTTP API
         run: |
-          curl -fsS -X POST http://127.0.0.1:8080/v1/assets \
-            -F "media=@/tmp/capsut-input.mp4" \
-            > /tmp/capsut-asset.json
+          curl -fsS -X POST http://127.0.0.1:8080/v1/assets             -F "media=@/tmp/capsut-input.mp4"             > /tmp/capsut-asset.json
           cat /tmp/capsut-asset.json
           python3 -c 'import json; d=json.load(open("/tmp/capsut-asset.json")); assert d["ok"] is True; assert d["size_bytes"] > 0; assert d["mime_type"] == "video/mp4"; print("HTTP asset upload validated")'
           python3 -c 'import json; p=json.load(open("/tmp/capsut-project.json")); a=json.load(open("/tmp/capsut-asset.json")); p["assets"][0]["uri"]=a["uri"]; open("/tmp/capsut-uploaded-project.json","w").write(json.dumps(p))'
@@ -100,6 +98,10 @@ jobs:
           job_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$response")"
           test -s "/tmp/capsut-api-renders/$job_id.mp4"
           ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "/tmp/capsut-api-renders/$job_id.mp4"
+          curl -fsS -o "/tmp/capsut-downloaded-$job_id.mp4" "http://127.0.0.1:8080/v1/renders/$job_id/download"
+          test -s "/tmp/capsut-downloaded-$job_id.mp4"
+          cmp "/tmp/capsut-api-renders/$job_id.mp4" "/tmp/capsut-downloaded-$job_id.mp4"
+          ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "/tmp/capsut-downloaded-$job_id.mp4"
       - name: Stop Cap sut HTTP API
         if: always()
         run: |
