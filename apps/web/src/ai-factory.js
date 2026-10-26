@@ -1,7 +1,7 @@
-const SOURCE_DATA = "https://raw.githubusercontent.com/safwt771754091s-crypto/مكتبة الأفكار الأصلية/main/data/videos.json";
-const SOURCE_REPO = "https://github.com/safwt771754091s-crypto/مكتبة الأفكار الأصلية";
+const SOURCE_DATA = "https://raw.githubusercontent.com/safwt771754091s-crypto/awesome-opus5-5-videos/main/data/videos.json";
+const SOURCE_REPO = "https://github.com/safwt771754091s-crypto/awesome-opus5-5-videos";
 let catalog = [];
-let catalogLoaded = false;
+let catalogتم تحميل = false;
 let loading = false;
 let activePrompt = null;
 
@@ -30,7 +30,7 @@ function openFactory() {
   panel.innerHTML = `
     <section class="ai-factory-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-factory-title">
       <div class="ai-factory-top">
-        <div><h2 id="ai-factory-title">مصنع الفيديو بالذكاء الاصطناعي · مكتبة الأفكار</h2><div class="ai-factory-help">استكشف مكتبة الأفكار والموجّهات، اختر فكرة، ثم عدّل موجّهك واحفظه كملف Brief لاستخدامه في سير عمل إنتاج الفيديو.</div></div>
+        <div><h2 id="ai-factory-title">مصنع الفيديو بالذكاء الاصطناعي · مكتبة الأفكار</h2><div class="ai-factory-help">استكشف مكتبة الأفكار والموجّهات، اختر فكرة، ثم عدّل موجّهك واحفظه كملف موجّه لاستخدامه في سير عمل إنتاج الفيديو.</div></div>
         <span class="spacer"></span><button id="ai-factory-close" aria-label="إغلاق">إغلاق ✕</button>
       </div>
       <div class="ai-factory-status" id="ai-factory-status">لم يتم تحميل المكتبة بعد.</div>
@@ -52,8 +52,8 @@ function openFactory() {
   panel.querySelector("#ai-factory-close").addEventListener("click", () => panel.remove());
   panel.querySelector("#ai-factory-search").addEventListener("input", renderResults);
   panel.querySelector("#ai-factory-category").addEventListener("change", renderResults);
-  panel.querySelector("#ai-factory-copy").addEventListener("click", copyBrief);
-  panel.querySelector("#ai-factory-download").addEventListener("click", saveBrief);
+  panel.querySelector("#ai-factory-copy").addEventListener("click", copyموجّه);
+  panel.querySelector("#ai-factory-download").addEventListener("click", saveموجّه);
   loadCatalog();
 }
 
@@ -68,9 +68,9 @@ async function loadCatalog() {
     const response = await fetch(SOURCE_DATA, {cache:"no-cache"});
     if (!response.ok) throw new Error("HTTP " + response.status);
     const data = await response.json();
-    if (!Array.isArray(data)) throw new Error("Unexpected catalog format");
+    if (!Array.isArray(data)) throw new Error("تنسيق المكتبة غير متوقع");
     catalog = data.filter(item => item && typeof item.prompt === "string" && item.slug);
-    catalogLoaded = true;
+    catalogتم تحميل = true;
     populateCategories();
     renderResults();
     status.textContent = `تم تحميل ${catalog.length} فكرة من المستودع الأصلي. اختر فكرة لمراجعتها.`;
@@ -125,7 +125,7 @@ function renderResults() {
   }));
 }
 
-async function copyBrief() {
+async function copyموجّه() {
   const brief = document.querySelector("#ai-factory-brief")?.value || "";
   if (!brief.trim()) { alert("اكتب موجّهًا أو اختر فكرة أولًا."); return; }
   try {
@@ -139,7 +139,7 @@ async function copyBrief() {
   }
 }
 
-function saveBrief() {
+function saveموجّه() {
   const prompt = document.querySelector("#ai-factory-brief")?.value || "";
   if (!prompt.trim()) { alert("اكتب موجّهًا أو اختر فكرة أولًا."); return; }
   const payload = {
