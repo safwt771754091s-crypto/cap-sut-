@@ -18,3 +18,11 @@
 .ai-factory-status{margin:10px 0;color:#a5b4fc;font-size:.88rem}
 .ai-factory-legal{font-size:.78rem;color:#94a3b8;line-height:1.45;margin-top:14px}
 @media(max-width:640px){.ai-factory-controls{grid-template-columns:1fr}.ai-factory-dialog{padding:14px}}
+
+/* Arabic interface defaults */
+html[dir="rtl"] body{direction:rtl;text-align:right}
+html[dir="rtl"] .ai-factory-dialog{direction:rtl;text-align:right}
+html[dir="rtl"] .ai-factory-top{flex-direction:row}
+html[dir="rtl"] .ai-factory-top .spacer{flex:1}
+html[dir="rtl"] .ai-factory-item button{align-self:flex-start}
+html[dir="rtl"] .ai-factory-controls input,html[dir="rtl"] .ai-factory-controls select,html[dir="rtl"] .ai-factory-brief{direction:rtl;text-align:right}
