@@ -1,7 +1,7 @@
 const state = {
   project: {
     schema_version: "0.1.0",
-    project: { id: "capsut-web", name: "Untitled Project", width: 1280, height: 720, frame_rate: { numerator: 30, denominator: 1 } },
+    project: { id: "capsut-web", name: "مشروع بلا عنوان", width: 1280, height: 720, frame_rate: { numerator: 30, denominator: 1 } },
     assets: [],
     timeline: { duration_seconds: 0, tracks: [] }
   },
@@ -28,18 +28,18 @@ function render() {
   app.innerHTML = `
     <header class="topbar">
       <strong>Cap sut</strong>
-      <span class="badge">Studio MVP</span>
+      <span class="badge">نسخة أولية للاستوديو</span>
       <span class="spacer"></span>
-      <button id="new">New</button>
-      <button id="open">Open</button>
-      <button id="save">Save</button>
-      <button class="primary" id="export">Export MP4</button>
+      <button id="new">جديد</button>
+      <button id="open">فتح</button>
+      <button id="save">حفظ</button>
+      <button class="primary" id="export">تصدير MP4</button>
     </header>
     <main class="workspace">
       <aside class="panel assets">
-        <h2>Media</h2>
+        <h2>الوسائط</h2>
         <label class="drop">
-          Import media
+          استيراد وسائط
           <input id="media" type="file" accept="video/*,audio/*,image/*" multiple>
         </label>
         <div class="asset-api">API: ${escapeHtml(state.apiUrl)}</div>
@@ -48,17 +48,17 @@ function render() {
       <section class="center">
         <div class="preview-wrap">
           <video id="preview" controls playsinline></video>
-          <div id="empty" class="empty">Import a video to begin</div>
+          <div id="empty" class="empty">استورد فيديو للبدء</div>
         </div>
         <div class="transport">
-          <button id="play">Play</button>
+          <button id="play">تشغيل</button>
           <span id="time">0.00s</span>
           <input id="scrub" type="range" min="0" max="0" step="0.01" value="0">
         </div>
         <div class="timeline">
-          <div class="timeline-head"><h2>Timeline</h2><span>${state.project.timeline.duration_seconds.toFixed(2)}s</span></div>
+          <div class="timeline-head"><h2>المخطط الزمني</h2><span>${state.project.timeline.duration_seconds.toFixed(2)}s</span></div>
           <div class="track">
-            <span class="track-label">Video</span>
+            <span class="track-label">فيديو</span>
             <div class="clips">${clips.map(c => `
               <button class="clip ${selected === c.id ? "selected" : ""}" data-clip="${c.id}" style="width:${Math.max(120, c.timeline_duration * 90)}px">
                 ${escapeHtml(assetName(c.asset_id))}
@@ -67,8 +67,8 @@ function render() {
         </div>
       </section>
       <aside class="panel inspector">
-        <h2>Inspector</h2>
-        ${selected ? inspector(selected) : '<p class="muted">Select a clip.</p>'}
+        <h2>خصائص المقطع</h2>
+        ${selected ? inspector(selected) : '<p class="muted">اختر مقطعًا لعرض خصائصه.</p>'}
       </aside>
     </main>
   `;
@@ -87,10 +87,10 @@ function inspector(id) {
   const clip = state.project.timeline.tracks.flatMap(t => t.clips).find(c => c.id === id);
   if (!clip) return "";
   return `
-    <label>Start<input id="start" type="number" step="0.01" value="${clip.timeline_start_seconds}"></label>
-    <label>Source In<input id="in" type="number" step="0.01" value="${clip.source_in_seconds}"></label>
-    <label>Source Out<input id="out" type="number" step="0.01" value="${clip.source_out_seconds}"></label>
-    <button id="split">Split at midpoint</button>
+    <label>بداية المقطع<input id="start" type="number" step="0.01" value="${clip.timeline_start_seconds}"></label>
+    <label>بداية المصدر<input id="in" type="number" step="0.01" value="${clip.source_in_seconds}"></label>
+    <label>نهاية المصدر<input id="out" type="number" step="0.01" value="${clip.source_out_seconds}"></label>
+    <button id="split">تقسيم من المنتصف</button>
   `;
 }
 
@@ -137,12 +137,12 @@ async function importFile(file) {
         form.append("media", file, file.name);
         const response = await fetch(base + "/v1/assets", { method: "POST", body: form });
         const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Media upload failed");
+        if (!response.ok) throw new Error(body.error || "فشل رفع الوسائط");
         asset.server_uri = body.uri;
         asset.uri = url;
         asset.mime_type = body.mime_type || asset.mime_type;
       } catch (error) {
-        alert("Media upload failed: " + error.message);
+        alert("فشل رفع الوسائط: " + error.message);
         return;
       }
     }
@@ -157,8 +157,8 @@ async function importFile(file) {
 }
 
 function getApiUrl() {
-  const value = window.prompt("Cap sut API URL", state.apiUrl);
-  if (!value) throw new Error("API URL is required");
+  const value = window.prompt("رابط واجهة Cap sut البرمجية", state.apiUrl);
+  if (!value) throw new Error("رابط الواجهة البرمجية مطلوب");
   state.apiUrl = value.replace(/\/$/, "");
   localStorage.setItem("capsut.apiUrl", state.apiUrl);
   return state.apiUrl;
@@ -215,7 +215,7 @@ function refreshPreview() {
 }
 
 function newProject() {
-  state.project = { schema_version:"0.1.0", project:{id:crypto.randomUUID(),name:"Untitled Project",width:1280,height:720,frame_rate:{numerator:30,denominator:1}},assets:[],timeline:{duration_seconds:0,tracks:[]} };
+  state.project = { schema_version:"0.1.0", project:{id:crypto.randomUUID(),name:"مشروع بلا عنوان",width:1280,height:720,frame_rate:{numerator:30,denominator:1}},assets:[],timeline:{duration_seconds:0,tracks:[]} };
   state.selectedClip = null;
   render();
 }
@@ -233,7 +233,7 @@ function openProject() {
   input.type = "file"; input.accept = ".json,application/json";
   input.onchange = async () => {
     const parsed = JSON.parse(await input.files[0].text());
-    if (parsed.schema_version !== "0.1.0") throw new Error("Unsupported Cap sut schema");
+    if (parsed.schema_version !== "0.1.0") throw new Error("إصدار ملف مشروع Cap sut غير مدعوم");
     state.project = parsed;
     state.selectedClip = null;
     render();
@@ -249,17 +249,17 @@ async function exportProject() {
   }
   const response = await fetch(base + "/v1/renders", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project:renderProject,format:"mp4"})});
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Render failed");
+  if (!response.ok) throw new Error(body.error || "فشل تصيير الفيديو");
   const downloadUrl = base + "/v1/renders/" + encodeURIComponent(body.job_id) + "/download";
   const link = document.createElement("a");
   link.href = downloadUrl;
   link.download = body.job_id + ".mp4";
-  link.textContent = "Download rendered MP4";
+  link.textContent = "تنزيل فيديو MP4 الناتج";
   link.target = "_blank";
   link.style.display = "inline-block";
   link.style.margin = "12px";
   link.click();
-  alert("Render complete. MP4 download started.");
+  alert("اكتمل التصيير. بدأ تنزيل ملف MP4.");
 }
 
 render();
