@@ -1,7 +1,7 @@
 const SOURCE_DATA = "https://raw.githubusercontent.com/safwt771754091s-crypto/awesome-opus5-5-videos/main/data/videos.json";
 const SOURCE_REPO = "https://github.com/safwt771754091s-crypto/awesome-opus5-5-videos";
 let catalog = [];
-let catalogتم تحميل = false;
+let catalogLoaded = false;
 let loading = false;
 let activePrompt = null;
 
@@ -70,7 +70,7 @@ async function loadCatalog() {
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error("تنسيق المكتبة غير متوقع");
     catalog = data.filter(item => item && typeof item.prompt === "string" && item.slug);
-    catalogتم تحميل = true;
+    catalogLoaded = true;
     populateCategories();
     renderResults();
     status.textContent = `تم تحميل ${catalog.length} فكرة من المستودع الأصلي. اختر فكرة لمراجعتها.`;
