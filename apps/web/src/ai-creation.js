@@ -118,10 +118,12 @@ async function generate() {
   button.disabled = true;
   setStatus("جارٍ التحقق من الجلسة ثم إرسال طلب توليد الصورة…");
   try {
+    const ratio = panel.querySelector("#ai-studio-ratio").value;
+    const dimensions = ratio === "16:9" ? {width:1024,height:576} : ratio === "9:16" ? {width:576,height:1024} : {width:768,height:768};
     const response = await fetch(base + "/v1/generate/image", {
       method:"POST", credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt,width:768,height:768})
+      body:JSON.stringify({prompt,...dimensions})
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
