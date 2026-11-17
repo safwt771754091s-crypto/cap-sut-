@@ -103,16 +103,25 @@ Required constraints:
 
 No render endpoint may report success until an output object has been verified in R2.
 
-## Identity and security decisions still required
+## Selected identity: first-party email and verification
 
-Before implementing private user accounts, select one supported authentication approach:
-1. Cloudflare Access for a restricted/private beta; or
-2. a customer identity provider; or
-3. a first-party email verification and session flow with secure password hashing, abuse controls, and account recovery.
+The product owner selected email registration with mandatory email verification.
+
+Required behavior:
+1. User submits email and password over HTTPS.
+2. Normalize the email consistently and enforce uniqueness.
+3. Store only a salted, versioned password hash; never store plaintext passwords.
+4. Create the account in pending_verification state and send a single-use verification link.
+5. Store only a cryptographic digest of the random verification token. Tokens expire, are single-use, and are invalidated when replaced.
+6. Activate the account only after successful token verification.
+7. Issue an opaque session token only after verification; store only its digest in D1.
+8. Use Secure, HttpOnly, SameSite cookies; rotate sessions and support logout/revocation.
+9. Rate-limit registration, login, resend-verification, and password-reset flows; return non-enumerating responses for email lookup.
+10. Implement password reset and account recovery with the same single-use, expiring-token pattern.
+
+Email delivery provider is not yet selected. The sender domain must be verified with the provider before production delivery. Provider API keys and all signing/secrets belong in Cloudflare Worker secrets, never in frontend code, D1 rows, or Git.
 
 Do not deploy placeholder authentication, accept unsigned user IDs, or treat CORS as authentication. The CORS allowlist merged in PR #11 is only a browser-origin control.
-
-Secrets belong in Cloudflare Worker secrets, never in frontend code, D1 rows, or Git.
 
 ## Ads and monetization
 
