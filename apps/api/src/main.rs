@@ -121,7 +121,7 @@ fn parse_allowed_origins(raw: Option<&str>) -> Result<Vec<HeaderValue>, String> 
         if origin == "*" || remainder.is_empty() || remainder.contains('/') || remainder.contains('?') || remainder.contains('#') {
             return Err(format!("origin must be an origin only, without a path: {origin}"));
         }
-        let parsed = HeaderValue::from_str(origin).map_err(|_| format!("invalid origin: {origin}"))?;
+        let parsed = HeaderValue::try_from(origin).map_err(|_| format!("invalid origin: {origin}"))?;
         Ok(parsed)
     }).collect()
 }
