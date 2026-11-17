@@ -14,3 +14,7 @@ SESSION_TTL_SECONDS = "2592000"
 
 [ai]
 binding = "AI"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "capsut-media"
