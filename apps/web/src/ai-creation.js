@@ -27,9 +27,9 @@ function openAIStudio() {
       <label class="ai-studio-field">اكتب وصف ما تريد إنشاءه<textarea id="ai-studio-prompt" rows="5" maxlength="5000" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
       <div class="ai-studio-options">
         <label class="ai-studio-field">الأبعاد<select id="ai-studio-ratio"><option value="16:9">أفقي 16:9</option><option value="9:16">عمودي 9:16</option><option value="1:1">مربع 1:1</option></select></label>
-        <label class="ai-studio-field" id="ai-studio-duration-wrap">مدة الفيديو<select id="ai-studio-duration"><option value="10">10 ثوانٍ</option><option value="15">15 ثانية</option><option value="30">30 ثانية</option><option value="45">45 ثانية</option><option value="60">دقيقة واحدة</option><option value="90">دقيقة ونصف</option><option value="120">دقيقتان</option><option value="180">3 دقائق</option><option value="240">4 دقائق</option><option value="300">5 دقائق</option><option value="360">6 دقائق</option><option value="420">7 دقائق</option><option value="480">8 دقائق (الحد الأقصى)</option></select><small>المدة المسموحة: من 10 ثوانٍ إلى 8 دقائق، حسب حدود مزوّد التوليد.</small></label>
+        <label class="ai-studio-field" id="ai-studio-duration-wrap">مدة الفيديو<select id="ai-studio-duration"><option value="15">15 ثانية (أقل مدة)</option><option value="30">30 ثانية</option><option value="60">دقيقة واحدة</option><option value="120">دقيقتان</option><option value="240">4 دقائق</option><option value="480">8 دقائق (الحد الأقصى)</option></select><small>مع مزوّد Golpo: من 15 ثانية إلى 8 دقائق.</small></label>
       </div>
-      <details class="ai-studio-settings"><summary>إعداد اتصال خدمة التوليد</summary><label class="ai-studio-field">رابط خادم التوليد<textarea id="ai-studio-endpoint" rows="2" placeholder="https://your-secure-api.example"></textarea></label><p>لا تضع مفتاح API هنا. يجب أن يحتفظ الخادم بالمفاتيح سرًا ويوفر المسارين /v1/generations/images و /v1/generations/videos.</p></details>
+      <details class="ai-studio-settings"><summary>إعداد اتصال خدمة التوليد</summary><label class="ai-studio-field">رابط خادم التوليد<input id="ai-studio-endpoint" type="url" placeholder="https://your-secure-api.example"></label><label class="ai-studio-field">رمز الوصول إلى خادم Cap sut<input id="ai-studio-access-token" type="password" autocomplete="off" placeholder="رمز الخادم — لا تضع مفتاح Golpo هنا"></label><p>رمز الوصول للخادم فقط. مفتاح Golpo يبقى محفوظًا في إعدادات الخادم ولا يصل إلى المتصفح.</p></details>
       <div class="ai-studio-status" id="ai-studio-status">خدمة التوليد غير متصلة حتى الآن. يمكنك كتابة وصفك وتجهيزه، ثم تفعيل الخادم لإنتاج الصور والفيديو.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
       <footer class="ai-studio-actions"><button id="ai-studio-copy">نسخ الوصف</button><button id="ai-studio-generate" class="primary">إنشاء الآن</button></footer>
@@ -78,8 +78,10 @@ async function generate() {
   const panel = document.querySelector("#ai-studio-panel");
   const prompt = panel?.querySelector("#ai-studio-prompt").value.trim();
   const endpoint = panel?.querySelector("#ai-studio-endpoint").value.trim().replace(/\/$/, "");
+  const accessToken = panel?.querySelector("#ai-studio-access-token").value.trim();
   if (!prompt) return setStatus("اكتب وصفًا واضحًا قبل بدء الإنشاء.");
-  if (!endpoint) return setStatus("لم يتم ربط مزوّد التوليد بعد. أدخل عنوان خادم آمن متوافقًا مع واجهة Cap sut أو اطلب إعداد خدمة التوليد.");
+  if (!endpoint) return setStatus("أدخل عنوان خادم Cap sut أولًا.");
+  if (!accessToken) return setStatus("أدخل رمز الوصول إلى خادم Cap sut. لا تستخدم مفتاح Golpo هنا.");
   let url;
   try { url = new URL(endpoint); if (!["https:","http:"].includes(url.protocol)) throw new Error(); }
   catch { return setStatus("رابط الخادم غير صالح. استخدم عنوان HTTPS موثوقًا."); }
@@ -91,14 +93,26 @@ async function generate() {
   button.disabled = true;
   setStatus("جارٍ إرسال طلب الإنشاء إلى الخادم…");
   const path = mode === "video" ? "/v1/generations/videos" : "/v1/generations/images";
-  const durationSeconds = Number(panel.querySelector("#ai-studio-duration").value);\n  if (mode === "video" && (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 480)) { setStatus("اختر مدة بين 10 ثوانٍ و8 دقائق."); return; }\n  const payload = {prompt, aspect_ratio:panel.querySelector("#ai-studio-ratio").value, ...(mode === "video" ? {duration_seconds:durationSeconds} : {})};
+  const durationSeconds = Number(panel.querySelector("#ai-studio-duration").value);
+  if (mode === "video" && ![15,30,60,120,240,480].includes(durationSeconds)) { setStatus("اختر مدة يدعمها مزوّد Golpo من 15 ثانية إلى 8 دقائق."); busy = false; button.disabled = false; return; }
+  const payload = {prompt, aspect_ratio:panel.querySelector("#ai-studio-ratio").value, ...(mode === "video" ? {duration_seconds:durationSeconds} : {})};
   try {
-    const response = await fetch(endpoint + path, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const response = await fetch(endpoint + path, {method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer " + accessToken},body:JSON.stringify(payload)});
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));
     if (body.status === "queued" || body.job_id) {
-      setStatus("تم استلام الطلب. رقم المهمة: " + (body.job_id || "قيد المعالجة") + (body.status_url ? " · تابع الحالة من الخادم." : ""));
-      return;
+      if (!body.job_id) throw new Error("لم يُرجع الخادم رقم المهمة.");
+      setStatus("استلم الخادم طلبك. جارٍ إنشاء الفيديو الطويل…");
+      for (let attempt = 0; attempt < 360; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const statusResponse = await fetch(endpoint + "/v1/generations/videos/" + encodeURIComponent(body.job_id), {headers:{"Authorization":"Bearer " + accessToken}});
+        const statusBody = await statusResponse.json().catch(() => ({}));
+        if (!statusResponse.ok) throw new Error(statusBody.error || "تعذّر متابعة مهمة الفيديو.");
+        if (statusBody.status === "failed") throw new Error(statusBody.error || "فشل إنشاء الفيديو.");
+        if (statusBody.status === "completed" && statusBody.url) { body.url = statusBody.url; break; }
+        setStatus("الفيديو قيد الإنشاء لدى Golpo… انتظر حتى يكتمل.");
+      }
+      if (!body.url) throw new Error("انتهت مهلة الانتظار؛ راجع لوحة Golpo لحالة المهمة.");
     }
     const output = body.url || body.output_url || body.output?.url;
     if (!output) throw new Error("استجاب الخادم دون رابط ملف. راجع عقد API.");
