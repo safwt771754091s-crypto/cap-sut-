@@ -2,17 +2,42 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  email TEXT,
+  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  password_hash TEXT NOT NULL,
   display_name TEXT,
-  status TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'suspended', 'deleted')),
+  email_verified_at TEXT,
+  status TEXT NOT NULL DEFAULT 'pending_verification'
+    CHECK (status IN ('pending_verification', 'active', 'suspended', 'deleted')),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
-  ON users(email COLLATE NOCASE)
-  WHERE email IS NOT NULL;
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS email_verification_user_created
+  ON email_verification_tokens(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  last_seen_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS sessions_user_expiry
+  ON sessions(user_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
