@@ -201,7 +201,7 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   let imageBase64: string;
   try {
     const output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps });
-    imageBase64 = output.image;
+    imageBase64 = output.image ?? "";
   } catch {
     return json({ok:false,error:"تعذر توليد الصورة حاليًا؛ قد تكون الحصة اليومية انتهت أو الخدمة مزدحمة. حاول لاحقًا."},503);
   }
