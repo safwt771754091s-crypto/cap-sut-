@@ -121,6 +121,19 @@ jobs:
             cat /tmp/capsut-api.log
           fi
 
+  edge-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Type-check Cloudflare Worker
+        run: |
+          cd apps/edge
+          npm install --no-audit --no-fund
+          npm run check
+
   web-smoke:
     runs-on: ubuntu-latest
     needs: test
