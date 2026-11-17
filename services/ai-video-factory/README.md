@@ -16,7 +16,7 @@ Requests include `prompt`, `aspect_ratio`, and for video `duration_seconds`. The
 
 Do not place provider API keys in browser code or local storage. Deploy a server-side provider adapter with authentication, quotas, moderation, restricted CORS, and controlled media storage before enabling public generation.
 
-The current UI is wired to this contract, but no AI provider is deployed or configured yet. The existing browser slideshow tool is not AI text-to-video.
+The Golpo server adapter is now included in this repository, and the editor can submit and poll long-form Golpo video jobs. It is not live until the adapter is deployed with a valid Golpo API plan/key and server access settings. The existing browser slideshow tool remains separate from AI text-to-video.
 
 
 ## Golpo long-form provider adapter
