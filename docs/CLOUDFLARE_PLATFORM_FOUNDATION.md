@@ -67,7 +67,7 @@ Initial entities:
 
 ## Initial D1 schema proposal
 
-The initial migration creates metadata and first-party email/password authentication tables. Registration remains pending until the email address is verified.
+The initial migration creates metadata and first-party email/password authentication tables. Email is required for registration and account contact, but email verification is deferred; a new account can use the platform immediately.
 
 - users(id, email, password_hash, display_name, email_verified_at, status, created_at, updated_at)
 - email_verification_tokens(id, user_id, token_hash, expires_at, used_at, created_at)
@@ -78,7 +78,7 @@ The initial migration creates metadata and first-party email/password authentica
 - usage_events(id, owner_id, event_type, quantity, metadata_json, created_at)
 
 Required constraints:
-- Unique normalized email address; unverified accounts cannot access private application resources.
+- Unique normalized email address. Email verification is not required in the initial release; accounts are usable immediately. Keep email_verified_at nullable so verification can be added later.
 - Store only salted password hashes using a documented, versioned password-hashing format; never store plaintext passwords.
 - Store only SHA-256 digests of random, single-use verification tokens and opaque session tokens; never store the raw tokens.
 - Verification tokens expire, are single-use, and are invalidated after successful verification or replacement.
@@ -103,23 +103,21 @@ Required constraints:
 
 No render endpoint may report success until an output object has been verified in R2.
 
-## Selected identity: first-party email and verification
+## Selected identity: email/password now, verification later
 
-The product owner selected email registration with mandatory email verification.
+The product owner clarified that the initial release must require an email address, but must not block registration or usage on email verification. Verification will be added in a later development phase.
 
-Required behavior:
+Initial behavior:
 1. User submits email and password over HTTPS.
 2. Normalize the email consistently and enforce uniqueness.
 3. Store only a salted, versioned password hash; never store plaintext passwords.
-4. Create the account in pending_verification state and send a single-use verification link.
-5. Store only a cryptographic digest of the random verification token. Tokens expire, are single-use, and are invalidated when replaced.
-6. Activate the account only after successful token verification.
-7. Issue an opaque session token only after verification; store only its digest in D1.
-8. Use Secure, HttpOnly, SameSite cookies; rotate sessions and support logout/revocation.
-9. Rate-limit registration, login, resend-verification, and password-reset flows; return non-enumerating responses for email lookup.
-10. Implement password reset and account recovery with the same single-use, expiring-token pattern.
+4. Create the account as active immediately. A nullable email_verified_at field records that verification has not yet happened.
+5. Issue an opaque session token after successful registration/login; store only its digest in D1.
+6. Use Secure, HttpOnly, SameSite cookies; rotate sessions and support logout/revocation.
+7. Rate-limit registration and login; return non-enumerating responses for email lookup.
+8. Add email verification and password recovery flows in a later phase, without making verification a prerequisite for initial account access.
 
-Email delivery provider is not yet selected. The sender domain must be verified with the provider before production delivery. Provider API keys and all signing/secrets belong in Cloudflare Worker secrets, never in frontend code, D1 rows, or Git.
+The email delivery provider is not needed for initial registration. When verification and email-based recovery are implemented, select a provider and verify the sender domain first. Provider API keys and all signing/secrets belong in Cloudflare Worker secrets, never in frontend code, D1 rows, or Git.
 
 Do not deploy placeholder authentication, accept unsigned user IDs, or treat CORS as authentication. The CORS allowlist merged in PR #11 is only a browser-origin control.
 
