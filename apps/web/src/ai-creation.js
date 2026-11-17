@@ -1,5 +1,4 @@
 const root = document.querySelector("#app");
-const escapeAI = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let mode = "image";
 let busy = false;
 let resultUrl = "";
@@ -34,6 +33,7 @@ function openAIStudio() {
       </div>
       <div class="ai-studio-tabs"><button data-mode="image" class="active">نص ← صورة</button><button data-mode="video">نص ← فيديو</button></div>
       <label class="ai-studio-field">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
+      <label class="ai-studio-field">جودة الصورة<select id="ai-studio-quality"><option value="4">سريعة — 4 خطوات</option><option value="8">أعلى جودة — 8 خطوات</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
       <footer class="ai-studio-actions"><button id="ai-studio-generate" class="primary">إنشاء الصورة</button></footer>
@@ -120,7 +120,7 @@ async function generate() {
     const response = await fetch(base + "/v1/generate/image", {
       method:"POST", credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt})
+      body:JSON.stringify({prompt,steps:Number(panel.querySelector("#ai-studio-quality").value)})
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -138,7 +138,7 @@ async function generate() {
     result.append(image);
     const download = document.createElement("a");
     download.href = resultUrl;
-    download.download = "capsut-generated-image.png";
+    download.download = "capsut-generated-image.jpg";
     download.textContent = "تنزيل الصورة";
     result.append(download);
     setStatus("نجح توليد الصورة من Cloudflare Workers AI.");
