@@ -33,7 +33,7 @@ The Worker can call Cloudflare Workers AI through the native `AI` binding:
 - Per-user protection: at most 10 generation attempts per UTC day, tracked in D1.
 - Successful generations are recorded in `usage_events`.
 
-The binding is declared in `wrangler.toml` as `[ai]`. The endpoint is implemented in source but is not live until the Worker is deployed in the owner's Cloudflare account and tested with an authenticated session. Cloudflare's free allocation is account-level and subject to the provider's current quota; the per-user limit does not increase that quota.
+The binding is declared in `wrangler.toml` as `[ai]`. Generated images are also persisted in the private R2 bucket `capsut-media` when the `MEDIA` binding is provisioned; the Worker records the asset ownership and object key in D1. The endpoint is implemented in source but is not live until the D1 database and R2 bucket are created in the owner's Cloudflare account, the `database_id` placeholder is replaced, the migration is applied, and the Worker is deployed and tested with an authenticated session. Cloudflare's free allocation is account-level and subject to the provider's current quota; the per-user limit does not increase that quota.
 
 ## Video generation status
 
