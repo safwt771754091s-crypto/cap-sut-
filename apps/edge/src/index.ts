@@ -254,7 +254,8 @@ export default {
       else if (url.pathname === "/v1/auth/register" && request.method === "POST") response = await register(request,env);
       else if (url.pathname === "/v1/auth/login" && request.method === "POST") response = await login(request,env);
       else if (url.pathname === "/v1/auth/logout" && request.method === "POST") response = await logout(request,env);
-      else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);\n      else if (url.pathname === "/v1/generate/image" && request.method === "POST") response = await generateImage(request,env);
+      else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);
+      else if (url.pathname === "/v1/generate/image" && request.method === "POST") response = await generateImage(request,env);
       else response = json({ok:false,error:"Not found."},404);
     } catch {
       response = json({ok:false,error:"حدث خطأ داخلي. حاول لاحقًا."},500);
