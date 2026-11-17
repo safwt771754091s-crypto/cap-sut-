@@ -11,3 +11,6 @@ migrations_dir = "migrations"
 [vars]
 ALLOWED_ORIGINS = "https://safwt771754091s-crypto.github.io"
 SESSION_TTL_SECONDS = "2592000"
+
+[ai]
+binding = "AI"
