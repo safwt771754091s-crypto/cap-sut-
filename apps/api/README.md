@@ -27,3 +27,7 @@ The API validates the canonical project, creates the same `RenderPlan` used by t
 - `CAPSUT_OUTPUT_DIR` — default system temp directory `capsut-renders`
 
 The initial API is synchronous by design. A persistent asynchronous job queue and status store will be added after the core render contract is stable.
+
+- `CAPSUT_CORS_ALLOWED_ORIGINS` — comma-separated exact origins (scheme + host + optional port, no path). Defaults to the Cap sut GitHub Pages origin plus localhost development origins. Set this explicitly for each deployed frontend; do not use `*`.
+
+The API now limits browser CORS to configured origins and allows only GET/POST methods and Content-Type/Authorization request headers. CORS is a browser boundary, not authentication: it does not protect the API from direct non-browser clients and does not replace user authentication or asset ownership checks.
