@@ -67,16 +67,22 @@ Initial entities:
 
 ## Initial D1 schema proposal
 
-The first migration should create metadata tables with foreign keys and indexes. Authentication credential storage is intentionally excluded until the sign-in method is selected.
+The initial migration creates metadata and first-party email/password authentication tables. Registration remains pending until the email address is verified.
 
-- users(id, email, display_name, status, created_at, updated_at)
+- users(id, email, password_hash, display_name, email_verified_at, status, created_at, updated_at)
+- email_verification_tokens(id, user_id, token_hash, expires_at, used_at, created_at)
+- sessions(id, user_id, token_hash, expires_at, revoked_at, last_seen_at, created_at)
 - projects(id, owner_id, title, project_json, schema_version, created_at, updated_at)
 - assets(id, owner_id, project_id, object_key, original_name, mime_type, size_bytes, status, created_at)
 - render_jobs(id, owner_id, project_id, status, input_json, output_object_key, error_code, created_at, started_at, completed_at)
 - usage_events(id, owner_id, event_type, quantity, metadata_json, created_at)
 
 Required constraints:
-- Unique normalized user email when email login is adopted.
+- Unique normalized email address; unverified accounts cannot access private application resources.
+- Store only salted password hashes using a documented, versioned password-hashing format; never store plaintext passwords.
+- Store only SHA-256 digests of random, single-use verification tokens and opaque session tokens; never store the raw tokens.
+- Verification tokens expire, are single-use, and are invalidated after successful verification or replacement.
+- Session cookies are Secure, HttpOnly, and SameSite; rotate session tokens after authentication and revoke them on logout/password reset.
 - Foreign keys from project, asset, render job, and usage event to owner.
 - Indexes on owner_id + updated_at/created_at and render_jobs.status + created_at.
 - Every query for a private resource must include owner_id, not just the resource ID.
