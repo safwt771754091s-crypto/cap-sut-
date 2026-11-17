@@ -197,6 +197,7 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
     prompt,
     steps: 4
   });
+  if (!output.image) throw new Error("Workers AI returned no image data.");
   const binary = atob(output.image);
   const imageBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
   await env.DB.prepare(
