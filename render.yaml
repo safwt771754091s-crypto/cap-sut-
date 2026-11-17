@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: capsut-golpo-api
+    runtime: node
+    rootDir: services/ai-video-factory
+    buildCommand: node --check golpo-server.mjs
+    startCommand: node golpo-server.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: GOLPO_API_BASE_URL
+        sync: false
+      - key: GOLPO_API_KEY
+        sync: false
+      - key: CAPSUT_GENERATION_TOKEN
+        sync: false
+      - key: CAPSUT_ALLOWED_ORIGIN
+        value: https://safwt771754091s-crypto.github.io
