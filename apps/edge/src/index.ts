@@ -1,5 +1,6 @@
 export interface Env {
   DB: D1Database;
+  AI?: Ai;
   ALLOWED_ORIGINS?: string;
   SESSION_TTL_SECONDS?: string;
 }
@@ -178,6 +179,43 @@ async function login(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function generateImage(request: Request, env: Env): Promise<Response> {
+  if (!env.AI) return json({ok:false,error:"خدمة توليد الصور غير مفعّلة على الخادم."},503);
+  const user = await currentUser(request, env);
+  if (!user) return json({ok:false,error:"سجّل الدخول لاستخدام مولّد الصور."},401);
+  const body = await readBody(request);
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!body || prompt.length < 3 || prompt.length > 1200) {
+    return json({ok:false,error:"اكتب وصفًا للصورة بين 3 و1200 حرف."},400);
+  }
+  const day = new Date().toISOString().slice(0,10);
+  const bucket = await sha256(`image:${user.id}:${day}`);
+  if (!await rateLimit(env, bucket, 10, 24 * 60 * 60)) {
+    return json({ok:false,error:"وصلت إلى الحد اليومي التجريبي لتوليد الصور. حاول غدًا."},429);
+  }
+  const width = body.width === 1024 ? 1024 : 768;
+  const height = body.height === 1024 ? 1024 : 768;
+  const steps = 4;
+  const output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+    prompt,
+    width,
+    height,
+    num_steps: steps
+  });
+  await env.DB.prepare(
+    "INSERT INTO usage_events (id, owner_id, event_type, quantity, metadata_json) VALUES (?, ?, 'image.generated', 1, ?)"
+  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell",width,height})).run();
+  return new Response(output as BodyInit, {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "no-store",
+      "X-CapSut-Provider": "cloudflare-workers-ai",
+      "X-CapSut-Model": "flux-1-schnell"
+    }
+  });
+}
+
 async function me(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
@@ -216,7 +254,7 @@ export default {
       else if (url.pathname === "/v1/auth/register" && request.method === "POST") response = await register(request,env);
       else if (url.pathname === "/v1/auth/login" && request.method === "POST") response = await login(request,env);
       else if (url.pathname === "/v1/auth/logout" && request.method === "POST") response = await logout(request,env);
-      else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);
+      else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);\n      else if (url.pathname === "/v1/generate/image" && request.method === "POST") response = await generateImage(request,env);
       else response = json({ok:false,error:"Not found."},404);
     } catch {
       response = json({ok:false,error:"حدث خطأ داخلي. حاول لاحقًا."},500);
