@@ -106,3 +106,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
 
 CREATE INDEX IF NOT EXISTS usage_events_owner_created
   ON usage_events(owner_id, created_at DESC);
+
+
+-- Lightweight per-email/IP rate-limit counters for registration and login.
+CREATE TABLE IF NOT EXISTS auth_rate_limits (
+  bucket_key TEXT PRIMARY KEY,
+  window_started_at INTEGER NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0)
+);
