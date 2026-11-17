@@ -1,0 +1,22 @@
+{
+  "id": "./",
+  "name": "Cap sut - استوديو الفيديو",
+  "short_name": "Cap sut",
+  "description": "منصة إبداعية لتحرير الفيديو وإنشاء محتوى مرئي.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080b12",
+  "theme_color": "#101827",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
