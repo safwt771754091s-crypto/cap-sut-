@@ -27,7 +27,7 @@ function openAIStudio() {
       <label class="ai-studio-field">اكتب وصف ما تريد إنشاءه<textarea id="ai-studio-prompt" rows="5" maxlength="5000" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
       <div class="ai-studio-options">
         <label class="ai-studio-field">الأبعاد<select id="ai-studio-ratio"><option value="16:9">أفقي 16:9</option><option value="9:16">عمودي 9:16</option><option value="1:1">مربع 1:1</option></select></label>
-        <label class="ai-studio-field" id="ai-studio-duration-wrap">مدة الفيديو<select id="ai-studio-duration"><option value="5">5 ثوانٍ</option><option value="8">8 ثوانٍ</option><option value="10">10 ثوانٍ</option></select></label>
+        <label class="ai-studio-field" id="ai-studio-duration-wrap">مدة الفيديو<select id="ai-studio-duration"><option value="10">10 ثوانٍ</option><option value="15">15 ثانية</option><option value="30">30 ثانية</option><option value="45">45 ثانية</option><option value="60">دقيقة واحدة</option><option value="90">دقيقة ونصف</option><option value="120">دقيقتان</option><option value="180">3 دقائق</option><option value="240">4 دقائق</option><option value="300">5 دقائق</option><option value="360">6 دقائق</option><option value="420">7 دقائق</option><option value="480">8 دقائق (الحد الأقصى)</option></select><small>المدة المسموحة: من 10 ثوانٍ إلى 8 دقائق، حسب حدود مزوّد التوليد.</small></label>
       </div>
       <details class="ai-studio-settings"><summary>إعداد اتصال خدمة التوليد</summary><label class="ai-studio-field">رابط خادم التوليد<textarea id="ai-studio-endpoint" rows="2" placeholder="https://your-secure-api.example"></textarea></label><p>لا تضع مفتاح API هنا. يجب أن يحتفظ الخادم بالمفاتيح سرًا ويوفر المسارين /v1/generations/images و /v1/generations/videos.</p></details>
       <div class="ai-studio-status" id="ai-studio-status">خدمة التوليد غير متصلة حتى الآن. يمكنك كتابة وصفك وتجهيزه، ثم تفعيل الخادم لإنتاج الصور والفيديو.</div>
@@ -91,7 +91,7 @@ async function generate() {
   button.disabled = true;
   setStatus("جارٍ إرسال طلب الإنشاء إلى الخادم…");
   const path = mode === "video" ? "/v1/generations/videos" : "/v1/generations/images";
-  const payload = {prompt, aspect_ratio:panel.querySelector("#ai-studio-ratio").value, ...(mode === "video" ? {duration_seconds:Number(panel.querySelector("#ai-studio-duration").value)} : {})};
+  const durationSeconds = Number(panel.querySelector("#ai-studio-duration").value);\n  if (mode === "video" && (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 480)) { setStatus("اختر مدة بين 10 ثوانٍ و8 دقائق."); return; }\n  const payload = {prompt, aspect_ratio:panel.querySelector("#ai-studio-ratio").value, ...(mode === "video" ? {duration_seconds:durationSeconds} : {})};
   try {
     const response = await fetch(endpoint + path, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const body = await response.json().catch(() => ({}));
@@ -127,9 +127,9 @@ style.textContent = `
 .ai-studio-dialog{width:min(760px,100%);max-height:94vh;overflow:auto;background:#111a28;border:1px solid #ffffff2a;border-radius:18px;padding:20px;box-shadow:0 24px 80px #000a}
 .ai-studio-head,.ai-studio-actions,.ai-studio-tabs{display:flex;align-items:center;gap:10px;justify-content:space-between}.ai-studio-head h2{margin:0;font-size:21px}.ai-studio-head p,.ai-studio-settings p{color:#a9b6c8;font-size:13px;margin:5px 0 14px}
 .ai-studio-tabs{justify-content:flex-start;border-bottom:1px solid #ffffff1b;margin:15px 0}.ai-studio-tabs button.active{background:#7861e9;border-color:#7861e9;color:white}
-.ai-studio-field{display:flex;flex-direction:column;gap:7px;margin:12px 0;font-size:13px;color:#d9e2f0}.ai-studio-field textarea,.ai-studio-field select{width:100%;background:#09111d;border:1px solid #39465a;border-radius:9px;padding:11px;color:#fff;font:inherit}
+.ai-studio-field{display:flex;flex-direction:column;gap:7px;margin:12px 0;font-size:13px;color:#d9e2f0}.ai-studio-field textarea,.ai-studio-field select{width:100%;box-sizing:border-box;background:#09111d;border:1px solid #39465a;border-radius:9px;padding:12px;color:#fff;font:inherit;transition:border-color .18s,box-shadow .18s}.ai-studio-field textarea:focus,.ai-studio-field select:focus{outline:none;border-color:#8b7aff;box-shadow:0 0 0 3px #806aff2b}.ai-studio-field small{color:#9eacc0;font-size:11px;line-height:1.6}
 .ai-studio-options{display:grid;grid-template-columns:1fr 1fr;gap:14px}.ai-studio-settings{padding:12px;border:1px solid #ffffff1c;border-radius:10px;color:#dce5f2;font-size:13px}.ai-studio-status{margin:14px 0;padding:12px;background:#202b3d;border-radius:9px;color:#cbd8eb;font-size:13px;line-height:1.7}
-.ai-studio-result{display:grid;gap:10px;justify-items:start}.ai-studio-result img,.ai-studio-result video{max-width:100%;max-height:360px;border-radius:10px}.ai-studio-result a{color:#8ee9de}.ai-studio-actions{justify-content:flex-start;margin-top:15px}.ai-studio-actions .primary{background:#806aff;color:white;border:0}
+.ai-studio-result{display:grid;gap:10px;justify-items:start}.ai-studio-result img,.ai-studio-result video{max-width:100%;max-height:360px;border-radius:10px}.ai-studio-result a{color:#8ee9de}.ai-studio-actions{justify-content:flex-start;margin-top:15px}.ai-studio-actions .primary{background:linear-gradient(135deg,#8b78ff,#624be8);color:white;border:0;font-weight:700;padding:11px 20px}.ai-studio-actions button,.ai-studio-head button,.ai-studio-tabs button{border-radius:9px;padding:9px 13px;cursor:pointer}.ai-studio-actions button:disabled{opacity:.55;cursor:wait}
 @media(max-width:600px){.ai-studio-dialog{padding:14px}.ai-studio-options{grid-template-columns:1fr}.ai-studio-head h2{font-size:17px}}
 `;
 document.head.append(style);
