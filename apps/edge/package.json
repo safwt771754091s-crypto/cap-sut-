@@ -7,7 +7,7 @@
     "check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20261117.0",
+    "@cloudflare/workers-types": "^4.20250408.0",
     "typescript": "^5.9.3"
   }
 }
