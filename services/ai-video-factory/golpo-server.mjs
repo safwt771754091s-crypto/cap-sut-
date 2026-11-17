@@ -32,7 +32,7 @@ async function golpo(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const reason = typeof data.error === "string" ? data.error : typeof data.message === "string" ? data.message : "Golpo provider request failed";
+    const reason = typeof data.detail === "string" ? data.detail : typeof data.error === "string" ? data.error : typeof data.message === "string" ? data.message : "Golpo provider request failed";
     throw new Error(reason.slice(0, 500));
   }
   return data;
