@@ -116,13 +116,12 @@ fn parse_allowed_origins(raw: Option<&str>) -> Result<Vec<HeaderValue>, String> 
     }
 
     values.into_iter().map(|origin| {
-        if origin == "*" || origin.contains('/') && !origin.starts_with("http://") && !origin.starts_with("https://") {
-            return Err(format!("invalid origin: {origin}"));
+        let remainder = origin.strip_prefix("https://").or_else(|| origin.strip_prefix("http://"))
+            .ok_or_else(|| format!("origin must include http:// or https://: {origin}"))?;
+        if origin == "*" || remainder.is_empty() || remainder.contains('/') || remainder.contains('?') || remainder.contains('#') {
+            return Err(format!("origin must be an origin only, without a path: {origin}"));
         }
         let parsed = HeaderValue::from_str(origin).map_err(|_| format!("invalid origin: {origin}"))?;
-        if !origin.starts_with("http://") && !origin.starts_with("https://") {
-            return Err(format!("origin must include http:// or https://: {origin}"));
-        }
         Ok(parsed)
     }).collect()
 }
@@ -261,5 +260,27 @@ mod tests {
     #[test]
     fn infers_common_video_mime() {
         assert_eq!(mime_from_extension("clip.mp4"), "video/mp4");
+    }
+
+    #[test]
+    fn cors_defaults_are_exact_origins() {
+        let origins = parse_allowed_origins(None).unwrap();
+        let values: Vec<_> = origins.iter().map(|v| v.to_str().unwrap()).collect();
+        assert!(values.contains(&"https://safwt771754091s-crypto.github.io"));
+        assert!(!values.contains(&"*"));
+    }
+
+    #[test]
+    fn cors_rejects_wildcard_paths_and_malformed_origins() {
+        assert!(parse_allowed_origins(Some("*")).is_err());
+        assert!(parse_allowed_origins(Some("https://example.com/path")).is_err());
+        assert!(parse_allowed_origins(Some("example.com")).is_err());
+        assert!(parse_allowed_origins(Some(" , ")).is_err());
+    }
+
+    #[test]
+    fn cors_accepts_comma_separated_exact_origins() {
+        let origins = parse_allowed_origins(Some("https://app.example, http://localhost:3000")).unwrap();
+        assert_eq!(origins.len(), 2);
     }
 }
