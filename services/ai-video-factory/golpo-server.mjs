@@ -48,6 +48,7 @@ const server = createServer(async (req, res) => {
     res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
   }
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+  if (req.method === "GET" && req.url === "/health") return send(res, 200, { ok: true, service: "capsut-golpo-adapter", configured: Boolean(baseUrl && apiKey && gatewayToken) });
   if (!baseUrl || !apiKey || !gatewayToken) return send(res, 503, { ok: false, error: "Golpo adapter is not configured on the server" });
   if (!sameSecret((req.headers.authorization || "").replace(/^Bearer\s+/i, ""), gatewayToken)) {
     return send(res, 401, { ok: false, error: "Unauthorized generation request" });
