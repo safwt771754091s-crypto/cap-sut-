@@ -234,6 +234,35 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function listAssets(request: Request, env: Env): Promise<Response> {
+  const user = await currentUser(request, env);
+  if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
+  const rows = await env.DB.prepare(
+    "SELECT id, original_name, mime_type, size_bytes, status, created_at FROM assets WHERE owner_id = ? AND status = 'ready' ORDER BY created_at DESC LIMIT 100"
+  ).bind(user.id).all();
+  return json({ok:true,assets:rows.results});
+}
+
+async function getAsset(request: Request, env: Env, assetId: string): Promise<Response> {
+  const user = await currentUser(request, env);
+  if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
+  if (!env.MEDIA) return json({ok:false,error:"تخزين الوسائط غير مفعّل."},503);
+  const asset = await env.DB.prepare(
+    "SELECT object_key, original_name, mime_type, size_bytes FROM assets WHERE id = ? AND owner_id = ? AND status = 'ready'"
+  ).bind(assetId,user.id).first<{object_key:string;original_name:string;mime_type:string;size_bytes:number}>();
+  if (!asset) return json({ok:false,error:"الملف غير موجود."},404);
+  const object = await env.MEDIA.get(asset.object_key);
+  if (!object) return json({ok:false,error:"ملف الوسائط غير موجود في التخزين."},404);
+  return new Response(object.body,{
+    headers:{
+      "Content-Type":asset.mime_type,
+      "Content-Length":String(asset.size_bytes),
+      "Content-Disposition":`attachment; filename="${asset.original_name.replace(/["\\\\]/g,"_")}"`,
+      "Cache-Control":"private, no-store"
+    }
+  });
+}
+
 async function me(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
@@ -274,6 +303,8 @@ export default {
       else if (url.pathname === "/v1/auth/logout" && request.method === "POST") response = await logout(request,env);
       else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);
       else if (url.pathname === "/v1/generate/image" && request.method === "POST") response = await generateImage(request,env);
+      else if (url.pathname === "/v1/assets" && request.method === "GET") response = await listAssets(request,env);
+      else if (url.pathname.startsWith("/v1/assets/") && request.method === "GET") response = await getAsset(request,env,url.pathname.slice("/v1/assets/".length));
       else response = json({ok:false,error:"Not found."},404);
     } catch {
       response = json({ok:false,error:"حدث خطأ داخلي. حاول لاحقًا."},500);
