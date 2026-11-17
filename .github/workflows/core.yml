@@ -84,6 +84,15 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:8080/health
+      - name: Verify exact-origin CORS policy
+        run: |
+          curl -sS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS http://127.0.0.1:8080/v1/renders -H 'Origin: https://safwt771754091s-crypto.github.io' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'
+          grep -Fqi 'access-control-allow-origin: https://safwt771754091s-crypto.github.io' /tmp/cors-allowed.headers
+          curl -sS -D /tmp/cors-denied.headers -o /dev/null -X OPTIONS http://127.0.0.1:8080/v1/renders -H 'Origin: https://attacker.example' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'
+          if grep -Fqi 'access-control-allow-origin:' /tmp/cors-denied.headers; then
+            echo "Unexpected CORS permission for unlisted origin" >&2
+            exit 1
+          fi
       - name: Upload media through Cap sut HTTP API
         run: |
           curl -fsS -X POST http://127.0.0.1:8080/v1/assets             -F "media=@/tmp/capsut-input.mp4" > /tmp/capsut-asset.json
