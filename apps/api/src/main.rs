@@ -1,6 +1,6 @@
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, State},
-    http::{header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE}, StatusCode},
+    http::{header::{AUTHORIZATION, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE}, HeaderValue, Method, StatusCode},
     response::{Json, Response},
     routing::{get, post},
     Router,
@@ -75,6 +75,8 @@ async fn main() {
     tokio::fs::create_dir_all(&asset_dir).await.expect("create asset dir");
 
     let state = Arc::new(AppState { ffmpeg_bin, output_dir, asset_dir });
+    let allowed_origins = parse_allowed_origins(std::env::var("CAPSUT_CORS_ALLOWED_ORIGINS").ok().as_deref())
+        .expect("CAPSUT_CORS_ALLOWED_ORIGINS must contain valid exact origins");
 
     let app = Router::new()
         .route("/health", get(health))
@@ -82,7 +84,12 @@ async fn main() {
         .route("/v1/renders", post(create_render))
         .route("/v1/renders/{job_id}/download", get(download_render))
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(allowed_origins)
+                .allow_methods([Method::GET, Method::POST])
+                .allow_headers([CONTENT_TYPE, AUTHORIZATION]),
+        )
         .with_state(state);
 
     let listener = TcpListener::bind(format!("0.0.0.0:{port}"))
@@ -91,6 +98,33 @@ async fn main() {
 
     println!("Cap sut API listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.expect("serve API");
+}
+
+fn parse_allowed_origins(raw: Option<&str>) -> Result<Vec<HeaderValue>, String> {
+    const DEFAULT_ORIGINS: &[&str] = &[
+        "https://safwt771754091s-crypto.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ];
+
+    let values: Vec<&str> = match raw {
+        Some(value) => value.split(',').map(str::trim).filter(|v| !v.is_empty()).collect(),
+        None => DEFAULT_ORIGINS.to_vec(),
+    };
+    if values.is_empty() {
+        return Err("at least one exact origin is required".into());
+    }
+
+    values.into_iter().map(|origin| {
+        if origin == "*" || origin.contains('/') && !origin.starts_with("http://") && !origin.starts_with("https://") {
+            return Err(format!("invalid origin: {origin}"));
+        }
+        let parsed = HeaderValue::from_str(origin).map_err(|_| format!("invalid origin: {origin}"))?;
+        if !origin.starts_with("http://") && !origin.starts_with("https://") {
+            return Err(format!("origin must include http:// or https://: {origin}"));
+        }
+        Ok(parsed)
+    }).collect()
 }
 
 async fn health() -> Json<HealthResponse> {
@@ -222,7 +256,7 @@ fn mime_from_extension(name: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::mime_from_extension;
+    use super::{mime_from_extension, parse_allowed_origins};
 
     #[test]
     fn infers_common_video_mime() {
