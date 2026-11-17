@@ -70,6 +70,7 @@ const server = createServer(async (req, res) => {
           video_orientation: input.aspect_ratio === "9:16" ? "vertical" : "horizontal",
           narration_language: "ar",
           golpo_video_engine: "golpo_canvas",
+          canvas_style_variant: "modern_minimal",
         }),
       });
       if (!job.job_id) return send(res, 502, { ok: false, error: "Golpo did not return a job_id" });
