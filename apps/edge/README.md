@@ -7,7 +7,7 @@ Cloudflare Worker control-plane API. The current implementation provides health,
 - Email and password are required.
 - Accounts become active immediately; email verification is intentionally deferred.
 - Passwords are stored as PBKDF2-SHA-256 hashes with per-account random salts.
-- Session tokens are random, stored only as SHA-256 digests, and delivered in Secure, HttpOnly, SameSite=Lax cookies.
+- Session tokens are random, stored only as SHA-256 digests, and delivered in Secure, HttpOnly, SameSite=None cookies.
 - Registration and login have D1-backed attempt counters.
 - Configure exact browser origins with `ALLOWED_ORIGINS`.
 
