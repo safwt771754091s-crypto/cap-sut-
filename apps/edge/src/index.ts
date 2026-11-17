@@ -198,14 +198,15 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   }
   const requestedSteps = Number(body.steps);
   const steps = requestedSteps === 8 ? 8 : 4;
-  let output: Awaited<ReturnType<Ai["run"]>>;
+  let imageBase64: string;
   try {
-    output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps });
+    const output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps });
+    imageBase64 = output.image;
   } catch {
     return json({ok:false,error:"تعذر توليد الصورة حاليًا؛ قد تكون الحصة اليومية انتهت أو الخدمة مزدحمة. حاول لاحقًا."},503);
   }
-  if (!output.image) return json({ok:false,error:"لم يُرجع مزود الصور ملفًا صالحًا."},502);
-  const binary = atob(output.image);
+  if (!imageBase64) return json({ok:false,error:"لم يُرجع مزود الصور ملفًا صالحًا."},502);
+  const binary = atob(imageBase64);
   const imageBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
   let assetId: string | null = null;
   if (env.MEDIA) {
