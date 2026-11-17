@@ -88,7 +88,9 @@ async function readBody(request: Request): Promise<Record<string, unknown> | nul
   if (length > MAX_BODY_BYTES) return null;
   if (!request.headers.get("Content-Type")?.toLowerCase().includes("application/json")) return null;
   try {
-    const body = await request.json() as Record<string, unknown>;
+    const raw = await request.arrayBuffer();
+    if (raw.byteLength > MAX_BODY_BYTES) return null;
+    const body = JSON.parse(new TextDecoder().decode(raw)) as Record<string, unknown>;
     return body && typeof body === "object" && !Array.isArray(body) ? body : null;
   } catch {
     return null;
@@ -193,16 +195,20 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   if (!await rateLimit(env, bucket, 10, 24 * 60 * 60)) {
     return json({ok:false,error:"وصلت إلى الحد اليومي التجريبي لتوليد الصور. حاول غدًا."},429);
   }
-  const output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-    prompt,
-    steps: 4
-  });
-  if (!output.image) throw new Error("Workers AI returned no image data.");
+  const requestedSteps = Number(body.steps);
+  const steps = requestedSteps === 8 ? 8 : 4;
+  let output: Awaited<ReturnType<Ai["run"]>>;
+  try {
+    output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt, steps });
+  } catch {
+    return json({ok:false,error:"تعذر توليد الصورة حاليًا؛ قد تكون الحصة اليومية انتهت أو الخدمة مزدحمة. حاول لاحقًا."},503);
+  }
+  if (!output.image) return json({ok:false,error:"لم يُرجع مزود الصور ملفًا صالحًا."},502);
   const binary = atob(output.image);
   const imageBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
   await env.DB.prepare(
     "INSERT INTO usage_events (id, owner_id, event_type, quantity, metadata_json) VALUES (?, ?, 'image.generated', 1, ?)"
-  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell"})).run();
+  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell",steps})).run();
   return new Response(imageBytes, {
     status: 200,
     headers: {
