@@ -1,0 +1,6 @@
+name = "capsut-golpo-api"
+main = "worker.js"
+compatibility_date = "2026-11-17"
+
+[vars]
+CAPSUT_ALLOWED_ORIGINS = "https://safwt771754091s-crypto.github.io"
