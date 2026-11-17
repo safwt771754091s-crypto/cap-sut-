@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   AI?: Ai;
+  MEDIA?: R2Bucket;
   ALLOWED_ORIGINS?: string;
   SESSION_TTL_SECONDS?: string;
 }
@@ -206,16 +207,29 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   if (!output.image) return json({ok:false,error:"لم يُرجع مزود الصور ملفًا صالحًا."},502);
   const binary = atob(output.image);
   const imageBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  let assetId: string | null = null;
+  if (env.MEDIA) {
+    assetId = crypto.randomUUID();
+    const objectKey = `generated/${user.id}/${assetId}.jpg`;
+    await env.MEDIA.put(objectKey, imageBytes, {
+      httpMetadata: { contentType: "image/jpeg", cacheControl: "private, no-store" },
+      customMetadata: { ownerId: user.id, provider: "cloudflare-workers-ai", model: "flux-1-schnell" }
+    });
+    await env.DB.prepare(
+      "INSERT INTO assets (id, owner_id, object_key, original_name, mime_type, size_bytes, status) VALUES (?, ?, ?, ?, 'image/jpeg', ?, 'ready')"
+    ).bind(assetId, user.id, objectKey, `capsut-${assetId}.jpg`, imageBytes.byteLength).run();
+  }
   await env.DB.prepare(
     "INSERT INTO usage_events (id, owner_id, event_type, quantity, metadata_json) VALUES (?, ?, 'image.generated', 1, ?)"
-  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell",steps})).run();
+  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell",steps,asset_id:assetId})).run();
   return new Response(imageBytes, {
     status: 200,
     headers: {
       "Content-Type": "image/jpeg",
       "Cache-Control": "no-store",
       "X-CapSut-Provider": "cloudflare-workers-ai",
-      "X-CapSut-Model": "flux-1-schnell"
+      "X-CapSut-Model": "flux-1-schnell",
+      ...(assetId ? { "X-CapSut-Asset-ID": assetId } : {})
     }
   });
 }
