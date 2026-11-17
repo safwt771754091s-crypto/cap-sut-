@@ -27,8 +27,8 @@ The Worker can call Cloudflare Workers AI through the native `AI` binding:
 
 - `POST /v1/generate/image`
 - Requires an authenticated Cap sut session cookie.
-- JSON body: `{"prompt":"...","width":768,"height":768}`
-- Returns a PNG image response (not a chat completion).
+- JSON body: `{"prompt":"..."}`
+- Returns a JPEG image response (not a chat completion).
 - Model: `@cf/black-forest-labs/flux-1-schnell`.
 - Per-user protection: at most 10 generation attempts per UTC day, tracked in D1.
 - Successful generations are recorded in `usage_events`.
