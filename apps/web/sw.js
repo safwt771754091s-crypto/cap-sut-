@@ -1,4 +1,4 @@
-const CACHE = "capsut-shell-v2";
+const CACHE = "capsut-shell-v3";
 const CORE = ["./", "./index.html", "./editor.html", "./manifest.webmanifest", "./icon.svg", "./src/styles.css", "./src/ai-factory.css", "./src/app.js", "./src/ai-factory.js", "./src/photo-video.js", "./src/ai-creation.js"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)));
