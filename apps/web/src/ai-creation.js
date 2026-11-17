@@ -80,6 +80,7 @@ async function generate() {
   const endpoint = panel?.querySelector("#ai-studio-endpoint").value.trim().replace(/\/$/, "");
   const accessToken = panel?.querySelector("#ai-studio-access-token").value.trim();
   if (!prompt) return setStatus("اكتب وصفًا واضحًا قبل بدء الإنشاء.");
+  if (mode === "image") return setStatus("تكامل Golpo المثبّت مخصص للفيديوهات الطويلة. توليد الصور يحتاج مزوّد صور منفصلًا.");
   if (!endpoint) return setStatus("أدخل عنوان خادم Cap sut أولًا.");
   if (!accessToken) return setStatus("أدخل رمز الوصول إلى خادم Cap sut. لا تستخدم مفتاح Golpo هنا.");
   let url;
