@@ -34,7 +34,6 @@ function openAIStudio() {
       </div>
       <div class="ai-studio-tabs"><button data-mode="image" class="active">نص ← صورة</button><button data-mode="video">نص ← فيديو</button></div>
       <label class="ai-studio-field">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
-      <label class="ai-studio-field">الأبعاد<select id="ai-studio-ratio"><option value="1:1">مربع 1:1</option><option value="16:9">أفقي 16:9</option><option value="9:16">عمودي 9:16</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
       <footer class="ai-studio-actions"><button id="ai-studio-generate" class="primary">إنشاء الصورة</button></footer>
@@ -118,12 +117,10 @@ async function generate() {
   button.disabled = true;
   setStatus("جارٍ التحقق من الجلسة ثم إرسال طلب توليد الصورة…");
   try {
-    const ratio = panel.querySelector("#ai-studio-ratio").value;
-    const dimensions = ratio === "16:9" ? {width:1024,height:576} : ratio === "9:16" ? {width:576,height:1024} : {width:768,height:768};
     const response = await fetch(base + "/v1/generate/image", {
       method:"POST", credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt,...dimensions})
+      body:JSON.stringify({prompt})
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
