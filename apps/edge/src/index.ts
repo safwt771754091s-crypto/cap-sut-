@@ -193,22 +193,19 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   if (!await rateLimit(env, bucket, 10, 24 * 60 * 60)) {
     return json({ok:false,error:"وصلت إلى الحد اليومي التجريبي لتوليد الصور. حاول غدًا."},429);
   }
-  const width = body.width === 1024 ? 1024 : 768;
-  const height = body.height === 1024 ? 1024 : 768;
-  const steps = 4;
   const output = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
     prompt,
-    width,
-    height,
-    num_steps: steps
+    steps: 4
   });
+  const binary = atob(output.image);
+  const imageBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
   await env.DB.prepare(
     "INSERT INTO usage_events (id, owner_id, event_type, quantity, metadata_json) VALUES (?, ?, 'image.generated', 1, ?)"
-  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell",width,height})).run();
-  return new Response(output as BodyInit, {
+  ).bind(crypto.randomUUID(), user.id, JSON.stringify({provider:"cloudflare-workers-ai",model:"@cf/black-forest-labs/flux-1-schnell"})).run();
+  return new Response(imageBytes, {
     status: 200,
     headers: {
-      "Content-Type": "image/png",
+      "Content-Type": "image/jpeg",
       "Cache-Control": "no-store",
       "X-CapSut-Provider": "cloudflare-workers-ai",
       "X-CapSut-Model": "flux-1-schnell"
