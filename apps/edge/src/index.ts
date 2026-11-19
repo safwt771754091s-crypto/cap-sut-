@@ -312,30 +312,50 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
     if (!statusResponse.ok) throw new Error("provider status unavailable");
     const statusBody = await statusResponse.json() as {status?:string;error?:string};
     if (statusBody.status === "COMPLETED") {
-      const resultResponse = await fetch(job.response_url,{headers:{"Authorization":`Key ${env.FAL_KEY || ""}`}});
+      const claim = await env.DB.prepare("UPDATE video_generation_jobs SET status='finalizing',updated_at=? WHERE id=? AND owner_id=? AND (status IN ('queued','running') OR (status='finalizing' AND updated_at < ?))")
+        .bind(new Date().toISOString(),job.id,user.id,new Date(Date.now()-5*60*1000).toISOString()).run();
+      if (!claim.meta.changes) return json({ok:true,job_id:job.id,status:"running"});
+      const resultResponse = await fetch(job.response_url,{headers:{"Authorization":"Key " + env.FAL_KEY},redirect:"error"});
       if (!resultResponse.ok) throw new Error("provider result unavailable");
       const result = await resultResponse.json() as {video?:{url?:string;content_type?:string;file_name?:string}};
       const videoUrl = result.video?.url;
-      if (!videoUrl) throw new Error("provider returned no video");
-      const download = await fetch(videoUrl);
-      if (!download.ok) throw new Error("video download failed");
-      const receivedType = download.headers.get("Content-Type") || result.video?.content_type || "";
-      const contentType = receivedType.startsWith("video/") ? receivedType : "video/mp4";
-      if (!videoUrl.toLowerCase().includes(".mp4") && !videoUrl.toLowerCase().includes(".webm") && !receivedType.startsWith("video/")) throw new Error("provider result is not a video");
-      const bytes = await download.arrayBuffer();
-      if (!bytes.byteLength || bytes.byteLength > 200*1024*1024) throw new Error("video file size is invalid");
-      if (!env.MEDIA) return json({ok:false,error:"تخزين الفيديو غير مفعّل على الخادم."},503);
+      if (!videoUrl || !isFalMediaUrl(videoUrl)) throw new Error("provider returned an invalid video URL");
+      const download = await fetch(videoUrl,{redirect:"error"});
+      if (!download.ok || !download.body) throw new Error("video download failed");
+      const headerType = (download.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+      const providerType = (result.video?.content_type || "").split(";")[0].trim().toLowerCase();
+      const contentType = headerType.startsWith("video/") ? headerType : providerType;
+      if (!contentType.startsWith("video/")) throw new Error("provider result is not a video");
+      const declaredSize = Number(download.headers.get("Content-Length") || "0");
+      const maxBytes = 100 * 1024 * 1024;
+      if (declaredSize > maxBytes) throw new Error("video file exceeds the 100 MB limit");
+      if (!env.MEDIA) throw new Error("media storage is unavailable");
       const assetId = crypto.randomUUID();
       const extension = contentType.includes("webm") ? "webm" : "mp4";
-      const objectKey = `generated/${user.id}/${assetId}.${extension}`;
-      await env.MEDIA.put(objectKey,bytes,{httpMetadata:{contentType,cacheControl:"private, no-store"},customMetadata:{ownerId:user.id,provider:"fal"}});
-      await env.DB.prepare("INSERT INTO assets (id,owner_id,object_key,original_name,mime_type,size_bytes,status) VALUES (?,?,?,?,?,?,'ready')")
-        .bind(assetId,user.id,objectKey,`capsut-video-${assetId}.${extension}`,contentType,bytes.byteLength).run();
-      await env.DB.prepare("UPDATE video_generation_jobs SET status='succeeded',asset_id=?,updated_at=? WHERE id=?")
-        .bind(assetId,new Date().toISOString(),job.id).run();
-      await env.DB.prepare("INSERT INTO usage_events (id,owner_id,event_type,quantity,metadata_json) VALUES (?,?,'video.generated',1,?)")
-        .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",asset_id:assetId,job_id:job.id})).run();
-      return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:`/v1/assets/${assetId}`});
+      const objectKey = "generated/" + user.id + "/" + assetId + "." + extension;
+      let sizeBytes = 0;
+      const boundedStream = download.body.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({
+        transform(chunk,controller) {
+          sizeBytes += chunk.byteLength;
+          if (sizeBytes > maxBytes) throw new Error("video file exceeds the 100 MB limit");
+          controller.enqueue(chunk);
+        }
+      }));
+      await env.MEDIA.put(objectKey,boundedStream,{httpMetadata:{contentType,cacheControl:"private, no-store"},customMetadata:{ownerId:user.id,provider:"fal"}});
+      try {
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO assets (id,owner_id,object_key,original_name,mime_type,size_bytes,status) VALUES (?,?,?,?,?,?,'ready')")
+            .bind(assetId,user.id,objectKey,"capsut-video-" + assetId + "." + extension,contentType,sizeBytes),
+          env.DB.prepare("UPDATE video_generation_jobs SET status='succeeded',asset_id=?,updated_at=? WHERE id=? AND owner_id=?")
+            .bind(assetId,new Date().toISOString(),job.id,user.id),
+          env.DB.prepare("INSERT INTO usage_events (id,owner_id,event_type,quantity,metadata_json) VALUES (?,?,'video.generated',1,?)")
+            .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",asset_id:assetId,job_id:job.id}))
+        ]);
+      } catch (error) {
+        await env.MEDIA.delete(objectKey);
+        throw error;
+      }
+      return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:"/v1/assets/" + assetId});
     }
     if (statusBody.status === "FAILED") {
       await env.DB.prepare("UPDATE video_generation_jobs SET status='failed',error_code='provider_failed',updated_at=? WHERE id=?")
@@ -346,7 +366,9 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
     await env.DB.prepare("UPDATE video_generation_jobs SET status=?,updated_at=? WHERE id=?").bind(status,new Date().toISOString(),job.id).run();
     return json({ok:true,job_id:job.id,status});
   } catch {
-    return json({ok:false,error:"تعذر تحديث حالة الفيديو أو حفظ الملف الناتج."},502);
+    await env.DB.prepare("UPDATE video_generation_jobs SET status='running',updated_at=? WHERE id=? AND owner_id=? AND status='finalizing'")
+      .bind(new Date().toISOString(),job.id,user.id).run().catch(() => undefined);
+    return json({ok:false,error:"تعذر تحديث حالة الفيديو أو حفظ الملف الناتج. يمكنك إعادة المحاولة."},502);
   }
 }
 
