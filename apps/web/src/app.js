@@ -130,6 +130,7 @@ async function importFile(file) {
   probe.src = url;
   probe.onloadedmetadata = async () => {
     asset.duration_seconds = Number.isFinite(probe.duration) ? probe.duration : 0;
+    let uploadError = null;
     if (file.type.startsWith("video/")) {
       try {
         const base = getApiUrl();
@@ -142,8 +143,7 @@ async function importFile(file) {
         asset.uri = url;
         asset.mime_type = body.mime_type || asset.mime_type;
       } catch (error) {
-        alert("فشل رفع الوسائط: " + error.message);
-        return;
+        uploadError = error.message;
       }
     }
     clip.source_out_seconds = asset.duration_seconds;
@@ -152,6 +152,7 @@ async function importFile(file) {
     track.clips.push(clip);
     state.selectedClip = clip.id;
     render();
+    if (uploadError) alert("أُدرج الفيديو في المخطط الزمني ويمكنك معاينته وتعديله محليًا، لكن خادم التصيير لم يستقبل نسخة منه: " + uploadError + ". اربط خادم التصيير قبل تصدير MP4.");
   };
   probe.load();
 }
