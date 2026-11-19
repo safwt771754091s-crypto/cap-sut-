@@ -256,8 +256,9 @@ async function generateVideo(request: Request, env: Env): Promise<Response> {
       body:JSON.stringify({prompt, resolution:"720p", aspect_ratio:"16:9"})
     });
     const payload = await response.json() as typeof queued & {detail?:string;error?:string};
-    if (!response.ok || !payload.request_id || !payload.status_url || !payload.response_url) {
-      return json({ok:false,error:payload.detail || payload.error || "رفض مزود الفيديو طلب الإنشاء."},502);
+    if (!response.ok || !payload.request_id || !payload.status_url || !payload.response_url ||
+      !isFalQueueUrl(payload.status_url) || !isFalQueueUrl(payload.response_url)) {
+      return json({ok:false,error:payload.detail || payload.error || "أعاد مزود الفيديو بيانات مهمة غير صالحة."},502);
     }
     queued = payload;
   } catch {
@@ -273,17 +274,41 @@ async function generateVideo(request: Request, env: Env): Promise<Response> {
   return json({ok:true,job_id:id,status:"queued"},202);
 }
 
+function isFalQueueUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "queue.fal.run" &&
+      !url.username && !url.password && !url.port;
+  } catch { return false; }
+}
+
+function isFalMediaUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      (url.hostname === "fal.media" || url.hostname.endsWith(".fal.media")) &&
+      !url.username && !url.password && !url.port;
+  } catch { return false; }
+}
+
 async function getVideoJob(request: Request, env: Env, jobId: string): Promise<Response> {
   const user = await currentUser(request,env);
   if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
-  const job = await env.DB.prepare(`SELECT id,status,status_url,response_url,asset_id
+  if (!env.FAL_KEY) return json({ok:false,error:"مزود توليد الفيديو غير مضبوط على الخادم."},503);
+  const job = await env.DB.prepare(`SELECT id,status,status_url,response_url,asset_id,updated_at
     FROM video_generation_jobs WHERE id=? AND owner_id=?`).bind(jobId,user.id)
-    .first<{id:string;status:string;status_url:string;response_url:string;asset_id:string|null}>();
+    .first<{id:string;status:string;status_url:string;response_url:string;asset_id:string|null;updated_at:string}>();
   if (!job) return json({ok:false,error:"مهمة الفيديو غير موجودة."},404);
   if (job.status === "succeeded" && job.asset_id) return json({ok:true,job_id:job.id,status:"succeeded",asset_id:job.asset_id,asset_url:`/v1/assets/${job.asset_id}`});
   if (job.status === "failed") return json({ok:true,job_id:job.id,status:"failed"});
+  if (job.status === "finalizing" && Date.now() - Date.parse(job.updated_at) < 5 * 60 * 1000) {
+    return json({ok:true,job_id:job.id,status:"running"});
+  }
+  if (!isFalQueueUrl(job.status_url) || !isFalQueueUrl(job.response_url)) {
+    return json({ok:false,error:"روابط مهمة الفيديو غير موثوقة."},502);
+  }
   try {
-    const statusResponse = await fetch(job.status_url,{headers:{"Authorization":`Key ${env.FAL_KEY || ""}`}});
+    const statusResponse = await fetch(job.status_url,{headers:{"Authorization":`Key ${env.FAL_KEY}`},redirect:"error"});
     if (!statusResponse.ok) throw new Error("provider status unavailable");
     const statusBody = await statusResponse.json() as {status?:string;error?:string};
     if (statusBody.status === "COMPLETED") {
