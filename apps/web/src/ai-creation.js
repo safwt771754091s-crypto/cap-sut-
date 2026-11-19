@@ -197,7 +197,7 @@ async function generateVideo() {
         result.append(video);
         const download = document.createElement("a");
         download.href = url;
-        download.download = "capsut-generated-video.mp4";
+        download.download = status.file_name || "capsut-generated-video.mp4";
         download.textContent = "تنزيل الفيديو الناتج";
         result.append(download);
         const importButton = document.createElement("button");
@@ -209,7 +209,7 @@ async function generateVideo() {
             const fileResponse = await fetch(url,{credentials:"include"});
             if (!fileResponse.ok) throw new Error("تعذر تنزيل الفيديو من مكتبة الأصول.");
             const blob = await fileResponse.blob();
-            const file = new File([blob],download.download,{type:blob.type || "video/mp4"});
+            const file = new File([blob],download.download,{type:status.mime_type || blob.type || "video/mp4"});
             window.dispatchEvent(new CustomEvent("capsut:import-generated-video",{detail:{file}}));
             setStatus("تم إرسال الفيديو إلى المحرر. أكمل رفعه إلى خادم التصيير عند الطلب.");
           } catch (error) {
