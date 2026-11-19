@@ -59,7 +59,7 @@ function apiBase() {
   if (!value) throw new Error("أدخل رابط خادم API أولًا.");
   const url = new URL(value);
   if (url.protocol !== "https:" && !["localhost","127.0.0.1"].includes(url.hostname)) throw new Error("يجب أن يستخدم الخادم اتصال HTTPS.");
-  localStorage.setItem("capsut.apiUrl", value);
+  localStorage.setItem("capsut.aiApiUrl", value);
   return value;
 }
 
