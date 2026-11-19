@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Provision and deploy production Worker
+    name: Apply migrations and deploy production Worker
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -33,13 +33,14 @@ jobs:
           test -n "$FAL_KEY" || { echo "Missing FAL_KEY repository secret"; exit 1; }
           python3 - <<'PY'
           import os
+          import re
           from pathlib import Path
           path = Path("apps/edge/wrangler.toml")
           config = path.read_text()
           placeholder = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
           database_id = os.environ["CAPSUT_D1_DATABASE_ID"].strip()
-          if not database_id or any(ch not in "0123456789abcdef-" for ch in database_id.lower()):
-              raise SystemExit("CAPSUT_D1_DATABASE_ID is not a valid D1 database identifier")
+          if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", database_id):
+              raise SystemExit("CAPSUT_D1_DATABASE_ID must be a UUID")
           if placeholder not in config and database_id not in config:
               raise SystemExit("wrangler.toml already contains a different D1 database ID; review it before deploying")
           path.write_text(config.replace(placeholder, database_id))
