@@ -4,6 +4,8 @@ export interface Env {
   MEDIA?: R2Bucket;
   ALLOWED_ORIGINS?: string;
   SESSION_TTL_SECONDS?: string;
+  FAL_KEY?: string;
+  FAL_VIDEO_MODEL?: string;
 }
 
 const PASSWORD_ITERATIONS = 310_000;
@@ -235,6 +237,143 @@ async function generateImage(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function generateVideo(request: Request, env: Env): Promise<Response> {
+  const user = await currentUser(request, env);
+  if (!user) return json({ok:false,error:"سجّل الدخول لاستخدام توليد الفيديو."},401);
+  if (!env.FAL_KEY) return json({ok:false,error:"مزود توليد الفيديو غير مضبوط بعد على الخادم (FAL_KEY). لم يتم إنشاء فيديو وهمي."},503);
+  const body = await readBody(request);
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!body || prompt.length < 8 || prompt.length > 1200) return json({ok:false,error:"اكتب وصف فيديو بين 8 و1200 حرف."},400);
+  const day = new Date().toISOString().slice(0,10);
+  const bucket = await sha256(`video:${user.id}:${day}`);
+  if (!await rateLimit(env,bucket,3,24*60*60)) return json({ok:false,error:"وصلت إلى الحد التجريبي اليومي لتوليد الفيديو (3 فيديوهات). حاول غدًا."},429);
+  const model = env.FAL_VIDEO_MODEL || "fal-ai/wan/v2.7/text-to-video";
+  let queued: {request_id?:string;status_url?:string;response_url?:string};
+  try {
+    const response = await fetch("https://queue.fal.run/" + model, {
+      method:"POST",
+      headers:{"Authorization":`Key ${env.FAL_KEY}`,"Content-Type":"application/json"},
+      body:JSON.stringify({prompt, resolution:"720p", aspect_ratio:"16:9", duration:5, enable_safety_checker:true, enable_prompt_expansion:true})
+    });
+    const payload = await response.json() as typeof queued & {detail?:string;error?:string};
+    if (!response.ok || !payload.request_id || !payload.status_url || !payload.response_url ||
+      !isFalQueueUrl(payload.status_url) || !isFalQueueUrl(payload.response_url)) {
+      return json({ok:false,error:payload.detail || payload.error || "أعاد مزود الفيديو بيانات مهمة غير صالحة."},502);
+    }
+    queued = payload;
+  } catch {
+    return json({ok:false,error:"تعذر الاتصال بمزود توليد الفيديو."},503);
+  }
+  const id = crypto.randomUUID();
+  await env.DB.prepare(`INSERT INTO video_generation_jobs
+    (id,owner_id,provider,provider_request_id,status,status_url,response_url,prompt)
+    VALUES (?,?, 'fal', ?, 'queued', ?, ?, ?)`)
+    .bind(id,user.id,queued.request_id,queued.status_url,queued.response_url,prompt).run();
+  await env.DB.prepare("INSERT INTO usage_events (id,owner_id,event_type,quantity,metadata_json) VALUES (?,?,'video.queued',1,?)")
+    .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",model,job_id:id})).run();
+  return json({ok:true,job_id:id,status:"queued"},202);
+}
+
+function isFalQueueUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "queue.fal.run" &&
+      !url.username && !url.password && !url.port;
+  } catch { return false; }
+}
+
+function isFalMediaUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const falMediaHost = url.hostname === "fal.media" || url.hostname.endsWith(".fal.media");
+    const falTestStoragePath = url.hostname === "storage.googleapis.com" && url.pathname.startsWith("/falserverless/");
+    return url.protocol === "https:" && (falMediaHost || falTestStoragePath) &&
+      !url.username && !url.password && !url.port;
+  } catch { return false; }
+}
+
+async function getVideoJob(request: Request, env: Env, jobId: string): Promise<Response> {
+  const user = await currentUser(request,env);
+  if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
+  if (!env.FAL_KEY) return json({ok:false,error:"مزود توليد الفيديو غير مضبوط على الخادم."},503);
+  const job = await env.DB.prepare(`SELECT j.id,j.status,j.status_url,j.response_url,j.asset_id,j.updated_at,a.mime_type,a.original_name
+    FROM video_generation_jobs j LEFT JOIN assets a ON a.id=j.asset_id WHERE j.id=? AND j.owner_id=?`).bind(jobId,user.id)
+    .first<{id:string;status:string;status_url:string;response_url:string;asset_id:string|null;updated_at:string;mime_type:string|null;original_name:string|null}>();
+  if (!job) return json({ok:false,error:"مهمة الفيديو غير موجودة."},404);
+  if (job.status === "succeeded" && job.asset_id) return json({ok:true,job_id:job.id,status:"succeeded",asset_id:job.asset_id,asset_url:`/v1/assets/${job.asset_id}`,mime_type:job.mime_type, file_name:job.original_name});
+  if (job.status === "failed") return json({ok:true,job_id:job.id,status:"failed"});
+  if (job.status === "finalizing" && Date.now() - Date.parse(job.updated_at) < 5 * 60 * 1000) {
+    return json({ok:true,job_id:job.id,status:"running"});
+  }
+  if (!isFalQueueUrl(job.status_url) || !isFalQueueUrl(job.response_url)) {
+    return json({ok:false,error:"روابط مهمة الفيديو غير موثوقة."},502);
+  }
+  try {
+    const statusResponse = await fetch(job.status_url,{headers:{"Authorization":`Key ${env.FAL_KEY}`},redirect:"error"});
+    if (!statusResponse.ok) throw new Error("provider status unavailable");
+    const statusBody = await statusResponse.json() as {status?:string;error?:string};
+    if (statusBody.status === "COMPLETED") {
+      const claim = await env.DB.prepare("UPDATE video_generation_jobs SET status='finalizing',updated_at=? WHERE id=? AND owner_id=? AND (status IN ('queued','running') OR (status='finalizing' AND updated_at < ?))")
+        .bind(new Date().toISOString(),job.id,user.id,new Date(Date.now()-5*60*1000).toISOString()).run();
+      if (!claim.meta.changes) return json({ok:true,job_id:job.id,status:"running"});
+      const resultResponse = await fetch(job.response_url,{headers:{"Authorization":"Key " + env.FAL_KEY},redirect:"error"});
+      if (!resultResponse.ok) throw new Error("provider result unavailable");
+      const result = await resultResponse.json() as {video?:{url?:string;content_type?:string;file_name?:string}};
+      const videoUrl = result.video?.url;
+      if (!videoUrl || !isFalMediaUrl(videoUrl)) throw new Error("provider returned an invalid video URL");
+      const download = await fetch(videoUrl,{redirect:"error"});
+      if (!download.ok || !download.body) throw new Error("video download failed");
+      const headerType = (download.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+      const providerType = (result.video?.content_type || "").split(";")[0].trim().toLowerCase();
+      const contentType = headerType.startsWith("video/") ? headerType : providerType;
+      if (!contentType.startsWith("video/")) throw new Error("provider result is not a video");
+      const declaredSize = Number(download.headers.get("Content-Length") || "0");
+      const maxBytes = 100 * 1024 * 1024;
+      if (declaredSize > maxBytes) throw new Error("video file exceeds the 100 MB limit");
+      if (!env.MEDIA) throw new Error("media storage is unavailable");
+      const assetId = crypto.randomUUID();
+      const extension = contentType.includes("webm") ? "webm" : "mp4";
+      const objectKey = "generated/" + user.id + "/" + assetId + "." + extension;
+      let sizeBytes = 0;
+      const boundedStream = download.body.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({
+        transform(chunk,controller) {
+          sizeBytes += chunk.byteLength;
+          if (sizeBytes > maxBytes) throw new Error("video file exceeds the 100 MB limit");
+          controller.enqueue(chunk);
+        }
+      }));
+      await env.MEDIA.put(objectKey,boundedStream,{httpMetadata:{contentType,cacheControl:"private, no-store"},customMetadata:{ownerId:user.id,provider:"fal"}});
+      try {
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO assets (id,owner_id,object_key,original_name,mime_type,size_bytes,status) VALUES (?,?,?,?,?,?,'ready')")
+            .bind(assetId,user.id,objectKey,"capsut-video-" + assetId + "." + extension,contentType,sizeBytes),
+          env.DB.prepare("UPDATE video_generation_jobs SET status='succeeded',asset_id=?,updated_at=? WHERE id=? AND owner_id=?")
+            .bind(assetId,new Date().toISOString(),job.id,user.id),
+          env.DB.prepare("INSERT INTO usage_events (id,owner_id,event_type,quantity,metadata_json) VALUES (?,?,'video.generated',1,?)")
+            .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",asset_id:assetId,job_id:job.id}))
+        ]);
+      } catch (error) {
+        await env.MEDIA.delete(objectKey);
+        throw error;
+      }
+      return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:"/v1/assets/" + assetId,mime_type:contentType,file_name:"capsut-video-" + assetId + "." + extension});
+    }
+    if (statusBody.status === "FAILED") {
+      await env.DB.prepare("UPDATE video_generation_jobs SET status='failed',error_code='provider_failed',updated_at=? WHERE id=? AND owner_id=? AND status IN ('queued','running')")
+        .bind(new Date().toISOString(),job.id,user.id).run();
+      return json({ok:true,job_id:job.id,status:"failed"});
+    }
+    const status = statusBody.status === "IN_PROGRESS" ? "running" : "queued";
+    await env.DB.prepare("UPDATE video_generation_jobs SET status=?,updated_at=? WHERE id=? AND owner_id=? AND status IN ('queued','running')")
+      .bind(status,new Date().toISOString(),job.id,user.id).run();
+    return json({ok:true,job_id:job.id,status});
+  } catch {
+    await env.DB.prepare("UPDATE video_generation_jobs SET status='running',updated_at=? WHERE id=? AND owner_id=? AND status='finalizing'")
+      .bind(new Date().toISOString(),job.id,user.id).run().catch(() => undefined);
+    return json({ok:false,error:"تعذر تحديث حالة الفيديو أو حفظ الملف الناتج. يمكنك إعادة المحاولة."},502);
+  }
+}
+
 async function listAssets(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
@@ -258,7 +397,7 @@ async function getAsset(request: Request, env: Env, assetId: string): Promise<Re
     headers:{
       "Content-Type":asset.mime_type,
       "Content-Length":String(asset.size_bytes),
-      "Content-Disposition":`attachment; filename="${asset.original_name.replace(/["\\\\]/g,"_")}"`,
+      "Content-Disposition":`inline; filename="${asset.original_name.replace(/["\\\\]/g,"_")}"`,
       "Cache-Control":"private, no-store"
     }
   });
@@ -304,6 +443,8 @@ export default {
       else if (url.pathname === "/v1/auth/logout" && request.method === "POST") response = await logout(request,env);
       else if (url.pathname === "/v1/me" && request.method === "GET") response = await me(request,env);
       else if (url.pathname === "/v1/generate/image" && request.method === "POST") response = await generateImage(request,env);
+      else if (url.pathname === "/v1/generate/video" && request.method === "POST") response = await generateVideo(request,env);
+      else if (url.pathname.startsWith("/v1/generate/video/") && request.method === "GET") response = await getVideoJob(request,env,url.pathname.slice("/v1/generate/video/".length));
       else if (url.pathname === "/v1/assets" && request.method === "GET") response = await listAssets(request,env);
       else if (url.pathname.startsWith("/v1/assets/") && request.method === "GET") response = await getAsset(request,env,url.pathname.slice("/v1/assets/".length));
       else response = json({ok:false,error:"Not found."},404);

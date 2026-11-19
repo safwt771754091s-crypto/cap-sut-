@@ -23,8 +23,8 @@ function openAIStudio() {
   panel.dir = "rtl";
   panel.innerHTML = `
     <section class="ai-studio-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-studio-title">
-      <header class="ai-studio-head"><div><h2 id="ai-studio-title">استوديو الإنشاء بالذكاء الاصطناعي</h2><p>أنشئ صورة فعلية من وصفك باستخدام Cloudflare Workers AI.</p></div><button id="ai-studio-close">إغلاق ✕</button></header>
-      <label class="ai-studio-field">عنوان خادم Cap sut (API)<input id="ai-studio-endpoint" type="url" placeholder="https://capsut-api.اسم-حسابك.workers.dev"></label>
+      <header class="ai-studio-head"><div><h2 id="ai-studio-title">استوديو الإنشاء بالذكاء الاصطناعي</h2><p>أنشئ صورًا وفيديوهات حقيقية من وصفك، ثم أرسل الفيديو الناتج إلى محرر Cap sut.</p></div><button id="ai-studio-close">إغلاق ✕</button></header>
+      <label class="ai-studio-field">عنوان خدمة الذكاء الاصطناعي (API)<input id="ai-studio-endpoint" type="url" placeholder="https://capsut-api.اسم-حسابك.workers.dev"></label>
       <div class="ai-studio-auth">
         <input id="ai-studio-email" type="email" autocomplete="email" placeholder="البريد الإلكتروني">
         <input id="ai-studio-password" type="password" autocomplete="current-password" placeholder="كلمة المرور (10 أحرف على الأقل)">
@@ -32,25 +32,30 @@ function openAIStudio() {
         <small>الحساب يتفعّل فورًا بالبريد وكلمة المرور؛ لا يلزم التحقق من البريد في هذه المرحلة.</small>
       </div>
       <div class="ai-studio-tabs"><button data-mode="image" class="active">نص ← صورة</button><button data-mode="video">نص ← فيديو</button></div>
-      <label class="ai-studio-field">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
+      <label class="ai-studio-field" id="ai-studio-prompt-label">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
       <label class="ai-studio-field">جودة الصورة<select id="ai-studio-quality"><option value="4">سريعة — 4 خطوات</option><option value="8">أعلى جودة — 8 خطوات</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
+      <section class="ai-studio-library">
+        <div class="ai-studio-library-head"><h3>مكتبتي · الأصول المولدة</h3><button id="ai-studio-refresh-assets" type="button">تحديث المكتبة</button></div>
+        <div id="ai-studio-assets" class="ai-studio-assets"><small>اضغط تحديث المكتبة لعرض ملفاتك المحفوظة.</small></div>
+      </section>
       <footer class="ai-studio-actions"><button id="ai-studio-generate" class="primary">إنشاء الصورة</button></footer>
     </section>`;
   document.body.append(panel);
-  panel.querySelector("#ai-studio-endpoint").value = localStorage.getItem("capsut.apiUrl") || "";
+  panel.querySelector("#ai-studio-endpoint").value = localStorage.getItem("capsut.aiApiUrl") || "";
   panel.querySelector("#ai-studio-close").addEventListener("click", () => panel.remove());
   panel.addEventListener("click", event => { if (event.target === panel) panel.remove(); });
   panel.querySelector("#ai-studio-endpoint").addEventListener("change", event => {
     const value = event.target.value.trim().replace(/\/$/, "");
-    localStorage.setItem("capsut.apiUrl", value);
+    localStorage.setItem("capsut.aiApiUrl", value);
     event.target.value = value;
   });
   panel.querySelector("#ai-studio-login").addEventListener("click", () => authenticate("login"));
   panel.querySelector("#ai-studio-register").addEventListener("click", () => authenticate("register"));
   panel.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => setMode(button.dataset.mode)));
   panel.querySelector("#ai-studio-generate").addEventListener("click", generate);
+  panel.querySelector("#ai-studio-refresh-assets").addEventListener("click", loadGeneratedAssets);
   setMode("image");
 }
 
@@ -59,7 +64,7 @@ function apiBase() {
   if (!value) throw new Error("أدخل رابط خادم API أولًا.");
   const url = new URL(value);
   if (url.protocol !== "https:" && !["localhost","127.0.0.1"].includes(url.hostname)) throw new Error("يجب أن يستخدم الخادم اتصال HTTPS.");
-  localStorage.setItem("capsut.apiUrl", value);
+  localStorage.setItem("capsut.aiApiUrl", value);
   return value;
 }
 
@@ -75,10 +80,18 @@ function setMode(next) {
   panel.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   const button = panel.querySelector("#ai-studio-generate");
   button.textContent = mode === "video" ? "توليد الفيديو" : "إنشاء الصورة";
-  button.disabled = mode === "video";
+  button.disabled = false;
+  const label = panel.querySelector("#ai-studio-prompt-label");
+  const prompt = panel.querySelector("#ai-studio-prompt");
+  const quality = panel.querySelector("#ai-studio-quality")?.closest(".ai-studio-field");
+  if (label) label.textContent = mode === "video" ? "اكتب وصف الفيديو" : "اكتب وصف الصورة";
+  if (prompt) prompt.placeholder = mode === "video"
+    ? "مثال: لقطة سينمائية لطائرة تحلق فوق جبال اليمن عند الشروق، حركة كاميرا سلسة وتفاصيل واقعية…" 
+    : "مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…";
+  if (quality) quality.hidden = mode === "video";
   setStatus(mode === "video"
-    ? "توليد الفيديو الحقيقي لم يُفعّل بعد. نجهّز له عامل GPU مستقلًا؛ لن نعرض نتيجة وهمية."
-    : "مولّد الصور يستخدم Cloudflare Workers AI عند نشر الخادم وتفعيل ربط AI.");
+    ? "يُنشأ الفيديو عبر مزود GPU خارجي. يلزم ضبط FAL_KEY على الخادم، وقد تُحتسب تكلفة لكل عملية."
+    : "توليد الصور متاح عند تفعيل Cloudflare Workers AI على الخادم.");
 }
 
 async function authenticate(action) {
@@ -106,7 +119,8 @@ async function authenticate(action) {
 }
 
 async function generate() {
-  if (busy || mode !== "image") return;
+  if (busy) return;
+  if (mode === "video") return generateVideo();
   const panel = document.querySelector("#ai-studio-panel");
   const prompt = panel.querySelector("#ai-studio-prompt").value.trim();
   if (prompt.length < 3) return setStatus("اكتب وصفًا واضحًا للصورة.");
@@ -145,6 +159,173 @@ async function generate() {
   } catch (error) {
     setStatus("لم يكتمل التوليد: " + error.message + ". تأكد من تسجيل الدخول ونشر خادم Cap sut وتفعيل AI binding.");
   } finally { busy = false; button.disabled = false; }
+}
+
+async function fetchGeneratedAsset(asset) {
+  const base = apiBase();
+  const response = await fetch(base + "/v1/assets/" + encodeURIComponent(asset.id), {credentials:"include"});
+  if (!response.ok) throw new Error("تعذر تنزيل الملف من مكتبتك.");
+  const blob = await response.blob();
+  return new File([blob],asset.original_name || ("capsut-asset-" + asset.id),{type:asset.mime_type || blob.type || "application/octet-stream"});
+}
+
+async function loadGeneratedAssets() {
+  const list = document.querySelector("#ai-studio-assets");
+  if (!list) return;
+  list.textContent = "جارٍ تحميل الأصول المحفوظة…";
+  try {
+    const base = apiBase();
+    const response = await fetch(base + "/v1/assets",{credentials:"include"});
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));
+    const assets = Array.isArray(body.assets) ? body.assets : [];
+    list.replaceChildren();
+    if (!assets.length) { list.textContent = "لا توجد ملفات محفوظة في مكتبتك حتى الآن."; return; }
+    for (const asset of assets) {
+      const row = document.createElement("div");
+      row.className = "ai-studio-asset-row";
+      const details = document.createElement("span");
+      details.textContent = (asset.original_name || "ملف") + " · " + Math.max(1,Math.round((asset.size_bytes || 0)/1024)) + " KB";
+      row.append(details);
+      if ((asset.mime_type || "").startsWith("video/")) {
+        const preview = document.createElement("button");
+        preview.type = "button"; preview.textContent = "معاينة";
+        preview.addEventListener("click",async () => {
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            const url = URL.createObjectURL(file);
+            const video = document.createElement("video");
+            video.controls = true; video.playsInline = true; video.src = url;
+            video.style.maxWidth = "100%"; video.style.maxHeight = "240px";
+            list.querySelector(".ai-studio-library-preview")?.remove();
+            const holder = document.createElement("div"); holder.className = "ai-studio-library-preview"; holder.append(video);
+            row.after(holder);
+          } catch (error) { setStatus(error.message); }
+        });
+        row.append(preview);
+        const add = document.createElement("button");
+        add.type = "button"; add.textContent = "إضافة للمحرر";
+        add.addEventListener("click",async () => {
+          add.disabled = true;
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            window.dispatchEvent(new CustomEvent("capsut:import-generated-video",{detail:{file}}));
+            setStatus("تم إرسال الملف من مكتبتك إلى المحرر.");
+          } catch (error) { setStatus(error.message); }
+          finally { add.disabled = false; }
+        });
+        row.append(add);
+      } else {
+        const download = document.createElement("button");
+        download.type = "button"; download.textContent = "تنزيل";
+        download.addEventListener("click",async () => {
+          download.disabled = true;
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            const url = URL.createObjectURL(file);
+            const link = document.createElement("a");
+            link.href = url; link.download = file.name; link.click();
+            setTimeout(() => URL.revokeObjectURL(url),1000);
+          } catch (error) { setStatus(error.message); }
+          finally { download.disabled = false; }
+        });
+        row.append(download);
+        if ((asset.mime_type || "").startsWith("image/")) {
+          const preview = document.createElement("button");
+          preview.type = "button"; preview.textContent = "معاينة";
+          preview.addEventListener("click",async () => {
+            try {
+              const file = await fetchGeneratedAsset(asset);
+              const url = URL.createObjectURL(file);
+              const img = document.createElement("img");
+              img.src = url; img.alt = asset.original_name || "صورة مولدة";
+              img.style.maxWidth = "100%"; img.style.maxHeight = "240px";
+              list.querySelector(".ai-studio-library-preview")?.remove();
+              const holder = document.createElement("div"); holder.className = "ai-studio-library-preview"; holder.append(img);
+              row.after(holder);
+            } catch (error) { setStatus(error.message); }
+          });
+          row.append(preview);
+        }
+      }
+      list.append(row);
+    }
+  } catch (error) { list.textContent = "تعذر تحميل المكتبة: " + error.message; }
+}
+
+async function generateVideo() {
+  const panel = document.querySelector("#ai-studio-panel");
+  const prompt = panel?.querySelector("#ai-studio-prompt")?.value.trim() || "";
+  if (prompt.length < 8) return setStatus("اكتب وصفًا للفيديو لا يقل عن 8 أحرف.");
+  let base;
+  try { base = apiBase(); } catch (error) { return setStatus(error.message); }
+  busy = true;
+  const button = panel.querySelector("#ai-studio-generate");
+  button.disabled = true;
+  const result = panel.querySelector("#ai-studio-result");
+  result.replaceChildren();
+  setStatus("جارٍ إرسال مهمة الفيديو إلى مزود التوليد…");
+  try {
+    const response = await fetch(base + "/v1/generate/video", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));
+    if (!body.job_id) throw new Error("لم يُرجع الخادم رقم مهمة صالحًا.");
+    setStatus("تم قبول المهمة. جارٍ توليد الفيديو؛ قد يستغرق ذلك عدة دقائق…");
+    const deadline = Date.now() + 30 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      const poll = await fetch(base + "/v1/generate/video/" + encodeURIComponent(body.job_id), {credentials:"include"});
+      const status = await poll.json().catch(() => ({}));
+      if (!poll.ok) throw new Error(status.error || ("HTTP " + poll.status));
+      if (status.status === "failed") throw new Error("أخفق مزود الفيديو في إنشاء المقطع. جرّب وصفًا آخر.");
+      if (status.status === "succeeded" && status.asset_url) {
+        const url = base + status.asset_url;
+        const video = document.createElement("video");
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.src = url;
+        video.style.maxWidth = "100%";
+        video.style.maxHeight = "420px";
+        result.append(video);
+        const download = document.createElement("a");
+        download.href = url;
+        download.download = status.file_name || "capsut-generated-video.mp4";
+        download.textContent = "تنزيل الفيديو الناتج";
+        result.append(download);
+        const importButton = document.createElement("button");
+        importButton.type = "button";
+        importButton.textContent = "إضافة الفيديو إلى محرر Cap sut";
+        importButton.addEventListener("click", async () => {
+          importButton.disabled = true;
+          try {
+            const fileResponse = await fetch(url,{credentials:"include"});
+            if (!fileResponse.ok) throw new Error("تعذر تنزيل الفيديو من مكتبة الأصول.");
+            const blob = await fileResponse.blob();
+            const file = new File([blob],download.download,{type:status.mime_type || blob.type || "video/mp4"});
+            window.dispatchEvent(new CustomEvent("capsut:import-generated-video",{detail:{file}}));
+            setStatus("تم إرسال الفيديو إلى المحرر. أكمل رفعه إلى خادم التصيير عند الطلب.");
+          } catch (error) {
+            setStatus("تعذر إدخال الفيديو للمحرر: " + error.message);
+          } finally { importButton.disabled = false; }
+        });
+        result.append(importButton);
+        setStatus("اكتمل توليد الفيديو وحُفظ في مكتبة أصول حسابك. يمكنك تنزيله أو إدخاله إلى المحرر.");
+        return;
+      }
+      setStatus(status.status === "running" ? "المزوّد ينشئ الفيديو الآن…" : "الفيديو في قائمة الانتظار…");
+    }
+    throw new Error("ما زالت المهمة قيد التنفيذ. أعد فتح الاستوديو وتحقق من المهمة لاحقًا.");
+  } catch (error) {
+    setStatus("لم يكتمل توليد الفيديو: " + error.message);
+  } finally {
+    busy = false;
+    if (button) button.disabled = false;
+  }
 }
 
 const style = document.createElement("style");
