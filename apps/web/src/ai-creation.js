@@ -23,8 +23,8 @@ function openAIStudio() {
   panel.dir = "rtl";
   panel.innerHTML = `
     <section class="ai-studio-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-studio-title">
-      <header class="ai-studio-head"><div><h2 id="ai-studio-title">استوديو الإنشاء بالذكاء الاصطناعي</h2><p>أنشئ صورة فعلية من وصفك باستخدام Cloudflare Workers AI.</p></div><button id="ai-studio-close">إغلاق ✕</button></header>
-      <label class="ai-studio-field">عنوان خادم Cap sut (API)<input id="ai-studio-endpoint" type="url" placeholder="https://capsut-api.اسم-حسابك.workers.dev"></label>
+      <header class="ai-studio-head"><div><h2 id="ai-studio-title">استوديو الإنشاء بالذكاء الاصطناعي</h2><p>أنشئ صورًا وفيديوهات حقيقية من وصفك، ثم أرسل الفيديو الناتج إلى محرر Cap sut.</p></div><button id="ai-studio-close">إغلاق ✕</button></header>
+      <label class="ai-studio-field">عنوان خدمة الذكاء الاصطناعي (API)<input id="ai-studio-endpoint" type="url" placeholder="https://capsut-api.اسم-حسابك.workers.dev"></label>
       <div class="ai-studio-auth">
         <input id="ai-studio-email" type="email" autocomplete="email" placeholder="البريد الإلكتروني">
         <input id="ai-studio-password" type="password" autocomplete="current-password" placeholder="كلمة المرور (10 أحرف على الأقل)">
@@ -32,19 +32,19 @@ function openAIStudio() {
         <small>الحساب يتفعّل فورًا بالبريد وكلمة المرور؛ لا يلزم التحقق من البريد في هذه المرحلة.</small>
       </div>
       <div class="ai-studio-tabs"><button data-mode="image" class="active">نص ← صورة</button><button data-mode="video">نص ← فيديو</button></div>
-      <label class="ai-studio-field">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
+      <label class="ai-studio-field" id="ai-studio-prompt-label">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
       <label class="ai-studio-field">جودة الصورة<select id="ai-studio-quality"><option value="4">سريعة — 4 خطوات</option><option value="8">أعلى جودة — 8 خطوات</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
       <footer class="ai-studio-actions"><button id="ai-studio-generate" class="primary">إنشاء الصورة</button></footer>
     </section>`;
   document.body.append(panel);
-  panel.querySelector("#ai-studio-endpoint").value = localStorage.getItem("capsut.apiUrl") || "";
+  panel.querySelector("#ai-studio-endpoint").value = localStorage.getItem("capsut.aiApiUrl") || "";
   panel.querySelector("#ai-studio-close").addEventListener("click", () => panel.remove());
   panel.addEventListener("click", event => { if (event.target === panel) panel.remove(); });
   panel.querySelector("#ai-studio-endpoint").addEventListener("change", event => {
     const value = event.target.value.trim().replace(/\/$/, "");
-    localStorage.setItem("capsut.apiUrl", value);
+    localStorage.setItem("capsut.aiApiUrl", value);
     event.target.value = value;
   });
   panel.querySelector("#ai-studio-login").addEventListener("click", () => authenticate("login"));
@@ -76,9 +76,17 @@ function setMode(next) {
   const button = panel.querySelector("#ai-studio-generate");
   button.textContent = mode === "video" ? "توليد الفيديو" : "إنشاء الصورة";
   button.disabled = false;
+  const label = panel.querySelector("#ai-studio-prompt-label");
+  const prompt = panel.querySelector("#ai-studio-prompt");
+  const quality = panel.querySelector("#ai-studio-quality")?.closest(".ai-studio-field");
+  if (label) label.textContent = mode === "video" ? "اكتب وصف الفيديو" : "اكتب وصف الصورة";
+  if (prompt) prompt.placeholder = mode === "video"
+    ? "مثال: لقطة سينمائية لطائرة تحلق فوق جبال اليمن عند الشروق، حركة كاميرا سلسة وتفاصيل واقعية…" 
+    : "مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…";
+  if (quality) quality.hidden = mode === "video";
   setStatus(mode === "video"
-    ? "اكتب وصف الفيديو واضغط توليد. يلزم ضبط مفتاح مزود الفيديو على الخادم؛ لن تظهر نتيجة وهمية."
-    : "مولّد الصور يستخدم Cloudflare Workers AI عند نشر الخادم وتفعيل ربط AI.");
+    ? "يُنشأ الفيديو عبر مزود GPU خارجي. يلزم ضبط FAL_KEY على الخادم، وقد تُحتسب تكلفة لكل عملية."
+    : "توليد الصور متاح عند تفعيل Cloudflare Workers AI على الخادم.");
 }
 
 async function authenticate(action) {
@@ -192,7 +200,24 @@ async function generateVideo() {
         download.download = "capsut-generated-video.mp4";
         download.textContent = "تنزيل الفيديو الناتج";
         result.append(download);
-        setStatus("اكتمل توليد الفيديو وحُفظ في مكتبة أصول حسابك على الخادم.");
+        const importButton = document.createElement("button");
+        importButton.type = "button";
+        importButton.textContent = "إضافة الفيديو إلى محرر Cap sut";
+        importButton.addEventListener("click", async () => {
+          importButton.disabled = true;
+          try {
+            const fileResponse = await fetch(url,{credentials:"include"});
+            if (!fileResponse.ok) throw new Error("تعذر تنزيل الفيديو من مكتبة الأصول.");
+            const blob = await fileResponse.blob();
+            const file = new File([blob],download.download,{type:blob.type || "video/mp4"});
+            window.dispatchEvent(new CustomEvent("capsut:import-generated-video",{detail:{file}}));
+            setStatus("تم إرسال الفيديو إلى المحرر. أكمل رفعه إلى خادم التصيير عند الطلب.");
+          } catch (error) {
+            setStatus("تعذر إدخال الفيديو للمحرر: " + error.message);
+          } finally { importButton.disabled = false; }
+        });
+        result.append(importButton);
+        setStatus("اكتمل توليد الفيديو وحُفظ في مكتبة أصول حسابك. يمكنك تنزيله أو إدخاله إلى المحرر.");
         return;
       }
       setStatus(status.status === "running" ? "المزوّد ينشئ الفيديو الآن…" : "الفيديو في قائمة الانتظار…");
