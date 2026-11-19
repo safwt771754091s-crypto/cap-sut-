@@ -20,10 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install FFmpeg
+      - name: Install FFmpeg and watermark font
         run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
             sudo apt-get install -y ffmpeg
           fi
       - name: Generate deterministic input MP4
@@ -66,6 +67,8 @@ jobs:
           cargo run -p capsut-render --bin capsut-render -- /tmp/capsut-project.json /tmp/capsut-output.mp4
           test -s /tmp/capsut-output.mp4
           ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 /tmp/capsut-output.mp4
+          ffmpeg -hide_banner -loglevel error -y -ss 0.5 -i /tmp/capsut-output.mp4 -vf "crop=500:100:780:620,signalstats,metadata=print:file=/tmp/capsut-watermark.txt" -frames:v 1 -f null -
+          python3 -c 'import re; s=open("/tmp/capsut-watermark.txt").read(); m=re.search(r"lavfi.signalstats.YAVG=([0-9.]+)",s); assert m and float(m.group(1)) > 1.0, "Cap sut watermark was not detected in the exported MP4"; print("Embedded Cap sut watermark verified; cropped luma average:",m.group(1))'
       - name: Start Cap sut HTTP API
         env:
           CAPSUT_API_PORT: "8080"
