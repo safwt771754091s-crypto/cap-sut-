@@ -215,6 +215,38 @@ async function loadGeneratedAssets() {
           finally { add.disabled = false; }
         });
         row.append(add);
+      } else {
+        const download = document.createElement("button");
+        download.type = "button"; download.textContent = "تنزيل";
+        download.addEventListener("click",async () => {
+          download.disabled = true;
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            const url = URL.createObjectURL(file);
+            const link = document.createElement("a");
+            link.href = url; link.download = file.name; link.click();
+            setTimeout(() => URL.revokeObjectURL(url),1000);
+          } catch (error) { setStatus(error.message); }
+          finally { download.disabled = false; }
+        });
+        row.append(download);
+        if ((asset.mime_type || "").startsWith("image/")) {
+          const preview = document.createElement("button");
+          preview.type = "button"; preview.textContent = "معاينة";
+          preview.addEventListener("click",async () => {
+            try {
+              const file = await fetchGeneratedAsset(asset);
+              const url = URL.createObjectURL(file);
+              const img = document.createElement("img");
+              img.src = url; img.alt = asset.original_name || "صورة مولدة";
+              img.style.maxWidth = "100%"; img.style.maxHeight = "240px";
+              list.querySelector(".ai-studio-library-preview")?.remove();
+              const holder = document.createElement("div"); holder.className = "ai-studio-library-preview"; holder.append(img);
+              row.after(holder);
+            } catch (error) { setStatus(error.message); }
+          });
+          row.append(preview);
+        }
       }
       list.append(row);
     }
