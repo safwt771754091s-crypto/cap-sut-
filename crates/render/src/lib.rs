@@ -193,7 +193,7 @@ mod tests {
     #[test] fn watermark_text_is_escaped_for_filter_syntax() {
         let watermark = WatermarkConfig { text: "Studio: 50%, it's yours".into(), opacity: 0.75, position: WatermarkPosition::BottomRight };
         let filter = build_video_filter(1280, 720, Path::new("/fonts/DejaVuSans.ttf"), &watermark);
-        assert!(filter.contains("Studio\\: 50\\%, it\\'s yours"));
+        assert!(filter.contains("Studio\: 50\%\, it\'s yours"));
     }
     #[test] fn invalid_watermark_settings_are_rejected() {
         let req = RenderRequest { job_id: "j1".into(), project: project(), format: "mp4".into() };
