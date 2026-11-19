@@ -36,6 +36,10 @@ function openAIStudio() {
       <label class="ai-studio-field">جودة الصورة<select id="ai-studio-quality"><option value="4">سريعة — 4 خطوات</option><option value="8">أعلى جودة — 8 خطوات</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
+      <section class="ai-studio-library">
+        <div class="ai-studio-library-head"><h3>مكتبتي · الأصول المولدة</h3><button id="ai-studio-refresh-assets" type="button">تحديث المكتبة</button></div>
+        <div id="ai-studio-assets" class="ai-studio-assets"><small>اضغط تحديث المكتبة لعرض ملفاتك المحفوظة.</small></div>
+      </section>
       <footer class="ai-studio-actions"><button id="ai-studio-generate" class="primary">إنشاء الصورة</button></footer>
     </section>`;
   document.body.append(panel);
@@ -51,6 +55,7 @@ function openAIStudio() {
   panel.querySelector("#ai-studio-register").addEventListener("click", () => authenticate("register"));
   panel.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => setMode(button.dataset.mode)));
   panel.querySelector("#ai-studio-generate").addEventListener("click", generate);
+  panel.querySelector("#ai-studio-refresh-assets").addEventListener("click", loadGeneratedAssets);
   setMode("image");
 }
 
@@ -154,6 +159,66 @@ async function generate() {
   } catch (error) {
     setStatus("لم يكتمل التوليد: " + error.message + ". تأكد من تسجيل الدخول ونشر خادم Cap sut وتفعيل AI binding.");
   } finally { busy = false; button.disabled = false; }
+}
+
+async function fetchGeneratedAsset(asset) {
+  const base = apiBase();
+  const response = await fetch(base + "/v1/assets/" + encodeURIComponent(asset.id), {credentials:"include"});
+  if (!response.ok) throw new Error("تعذر تنزيل الملف من مكتبتك.");
+  const blob = await response.blob();
+  return new File([blob],asset.original_name || ("capsut-asset-" + asset.id),{type:asset.mime_type || blob.type || "application/octet-stream"});
+}
+
+async function loadGeneratedAssets() {
+  const list = document.querySelector("#ai-studio-assets");
+  if (!list) return;
+  list.textContent = "جارٍ تحميل الأصول المحفوظة…";
+  try {
+    const base = apiBase();
+    const response = await fetch(base + "/v1/assets",{credentials:"include"});
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));
+    const assets = Array.isArray(body.assets) ? body.assets : [];
+    list.replaceChildren();
+    if (!assets.length) { list.textContent = "لا توجد ملفات محفوظة في مكتبتك حتى الآن."; return; }
+    for (const asset of assets) {
+      const row = document.createElement("div");
+      row.className = "ai-studio-asset-row";
+      const details = document.createElement("span");
+      details.textContent = (asset.original_name || "ملف") + " · " + Math.max(1,Math.round((asset.size_bytes || 0)/1024)) + " KB";
+      row.append(details);
+      if ((asset.mime_type || "").startsWith("video/")) {
+        const preview = document.createElement("button");
+        preview.type = "button"; preview.textContent = "معاينة";
+        preview.addEventListener("click",async () => {
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            const url = URL.createObjectURL(file);
+            const video = document.createElement("video");
+            video.controls = true; video.playsInline = true; video.src = url;
+            video.style.maxWidth = "100%"; video.style.maxHeight = "240px";
+            list.querySelector(".ai-studio-library-preview")?.remove();
+            const holder = document.createElement("div"); holder.className = "ai-studio-library-preview"; holder.append(video);
+            row.after(holder);
+          } catch (error) { setStatus(error.message); }
+        });
+        row.append(preview);
+        const add = document.createElement("button");
+        add.type = "button"; add.textContent = "إضافة للمحرر";
+        add.addEventListener("click",async () => {
+          add.disabled = true;
+          try {
+            const file = await fetchGeneratedAsset(asset);
+            window.dispatchEvent(new CustomEvent("capsut:import-generated-video",{detail:{file}}));
+            setStatus("تم إرسال الملف من مكتبتك إلى المحرر.");
+          } catch (error) { setStatus(error.message); }
+          finally { add.disabled = false; }
+        });
+        row.append(add);
+      }
+      list.append(row);
+    }
+  } catch (error) { list.textContent = "تعذر تحميل المكتبة: " + error.message; }
 }
 
 async function generateVideo() {
