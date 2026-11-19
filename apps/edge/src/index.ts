@@ -285,8 +285,9 @@ function isFalQueueUrl(value: string): boolean {
 function isFalMediaUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" &&
-      (url.hostname === "fal.media" || url.hostname.endsWith(".fal.media")) &&
+    const falMediaHost = url.hostname === "fal.media" || url.hostname.endsWith(".fal.media");
+    const falTestStoragePath = url.hostname === "storage.googleapis.com" && url.pathname.startsWith("/falserverless/");
+    return url.protocol === "https:" && (falMediaHost || falTestStoragePath) &&
       !url.username && !url.password && !url.port;
   } catch { return false; }
 }
