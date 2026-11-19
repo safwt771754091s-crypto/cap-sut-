@@ -47,7 +47,7 @@ function render() {
       </aside>
       <section class="center">
         <div class="preview-wrap">
-          <video id="preview" controls playsinline></video>
+          <div class="preview-frame"><video id="preview" controls playsinline></video><div class="preview-watermark" aria-hidden="true">Made with Cap sut</div></div>
           <div id="empty" class="empty">استورد فيديو للبدء</div>
         </div>
         <div class="transport">
