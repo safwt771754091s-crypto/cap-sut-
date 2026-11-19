@@ -75,9 +75,9 @@ function setMode(next) {
   panel.querySelectorAll("[data-mode]").forEach(button => button.classList.toggle("active", button.dataset.mode === mode));
   const button = panel.querySelector("#ai-studio-generate");
   button.textContent = mode === "video" ? "توليد الفيديو" : "إنشاء الصورة";
-  button.disabled = mode === "video";
+  button.disabled = false;
   setStatus(mode === "video"
-    ? "توليد الفيديو الحقيقي لم يُفعّل بعد. نجهّز له عامل GPU مستقلًا؛ لن نعرض نتيجة وهمية."
+    ? "اكتب وصف الفيديو واضغط توليد. يلزم ضبط مفتاح مزود الفيديو على الخادم؛ لن تظهر نتيجة وهمية."
     : "مولّد الصور يستخدم Cloudflare Workers AI عند نشر الخادم وتفعيل ربط AI.");
 }
 
@@ -106,7 +106,8 @@ async function authenticate(action) {
 }
 
 async function generate() {
-  if (busy || mode !== "image") return;
+  if (busy) return;
+  if (mode === "video") return generateVideo();
   const panel = document.querySelector("#ai-studio-panel");
   const prompt = panel.querySelector("#ai-studio-prompt").value.trim();
   if (prompt.length < 3) return setStatus("اكتب وصفًا واضحًا للصورة.");
@@ -145,6 +146,64 @@ async function generate() {
   } catch (error) {
     setStatus("لم يكتمل التوليد: " + error.message + ". تأكد من تسجيل الدخول ونشر خادم Cap sut وتفعيل AI binding.");
   } finally { busy = false; button.disabled = false; }
+}
+
+async function generateVideo() {
+  const panel = document.querySelector("#ai-studio-panel");
+  const prompt = panel?.querySelector("#ai-studio-prompt")?.value.trim() || "";
+  if (prompt.length < 8) return setStatus("اكتب وصفًا للفيديو لا يقل عن 8 أحرف.");
+  let base;
+  try { base = apiBase(); } catch (error) { return setStatus(error.message); }
+  busy = true;
+  const button = panel.querySelector("#ai-studio-generate");
+  button.disabled = true;
+  const result = panel.querySelector("#ai-studio-result");
+  result.replaceChildren();
+  setStatus("جارٍ إرسال مهمة الفيديو إلى مزود التوليد…");
+  try {
+    const response = await fetch(base + "/v1/generate/video", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));
+    if (!body.job_id) throw new Error("لم يُرجع الخادم رقم مهمة صالحًا.");
+    setStatus("تم قبول المهمة. جارٍ توليد الفيديو؛ قد يستغرق ذلك عدة دقائق…");
+    const deadline = Date.now() + 30 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      const poll = await fetch(base + "/v1/generate/video/" + encodeURIComponent(body.job_id), {credentials:"include"});
+      const status = await poll.json().catch(() => ({}));
+      if (!poll.ok) throw new Error(status.error || ("HTTP " + poll.status));
+      if (status.status === "failed") throw new Error("أخفق مزود الفيديو في إنشاء المقطع. جرّب وصفًا آخر.");
+      if (status.status === "succeeded" && status.asset_url) {
+        const url = base + status.asset_url;
+        const video = document.createElement("video");
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.src = url;
+        video.style.maxWidth = "100%";
+        video.style.maxHeight = "420px";
+        result.append(video);
+        const download = document.createElement("a");
+        download.href = url;
+        download.download = "capsut-generated-video.mp4";
+        download.textContent = "تنزيل الفيديو الناتج";
+        result.append(download);
+        setStatus("اكتمل توليد الفيديو وحُفظ في مكتبة أصول حسابك على الخادم.");
+        return;
+      }
+      setStatus(status.status === "running" ? "المزوّد ينشئ الفيديو الآن…" : "الفيديو في قائمة الانتظار…");
+    }
+    throw new Error("ما زالت المهمة قيد التنفيذ. أعد فتح الاستوديو وتحقق من المهمة لاحقًا.");
+  } catch (error) {
+    setStatus("لم يكتمل توليد الفيديو: " + error.message);
+  } finally {
+    busy = false;
+    if (button) button.disabled = false;
+  }
 }
 
 const style = document.createElement("style");
