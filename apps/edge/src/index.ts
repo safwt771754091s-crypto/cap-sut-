@@ -295,11 +295,11 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
   const user = await currentUser(request,env);
   if (!user) return json({ok:false,error:"يلزم تسجيل الدخول."},401);
   if (!env.FAL_KEY) return json({ok:false,error:"مزود توليد الفيديو غير مضبوط على الخادم."},503);
-  const job = await env.DB.prepare(`SELECT id,status,status_url,response_url,asset_id,updated_at
-    FROM video_generation_jobs WHERE id=? AND owner_id=?`).bind(jobId,user.id)
-    .first<{id:string;status:string;status_url:string;response_url:string;asset_id:string|null;updated_at:string}>();
+  const job = await env.DB.prepare(`SELECT j.id,j.status,j.status_url,j.response_url,j.asset_id,j.updated_at,a.mime_type,a.original_name
+    FROM video_generation_jobs j LEFT JOIN assets a ON a.id=j.asset_id WHERE j.id=? AND j.owner_id=?`).bind(jobId,user.id)
+    .first<{id:string;status:string;status_url:string;response_url:string;asset_id:string|null;updated_at:string;mime_type:string|null;original_name:string|null}>();
   if (!job) return json({ok:false,error:"مهمة الفيديو غير موجودة."},404);
-  if (job.status === "succeeded" && job.asset_id) return json({ok:true,job_id:job.id,status:"succeeded",asset_id:job.asset_id,asset_url:`/v1/assets/${job.asset_id}`});
+  if (job.status === "succeeded" && job.asset_id) return json({ok:true,job_id:job.id,status:"succeeded",asset_id:job.asset_id,asset_url:`/v1/assets/${job.asset_id}`,mime_type:job.mime_type, file_name:job.original_name});
   if (job.status === "failed") return json({ok:true,job_id:job.id,status:"failed"});
   if (job.status === "finalizing" && Date.now() - Date.parse(job.updated_at) < 5 * 60 * 1000) {
     return json({ok:true,job_id:job.id,status:"running"});
@@ -355,7 +355,7 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
         await env.MEDIA.delete(objectKey);
         throw error;
       }
-      return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:"/v1/assets/" + assetId});
+      return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:"/v1/assets/" + assetId,mime_type:contentType,file_name:"capsut-video-" + assetId + "." + extension});
     }
     if (statusBody.status === "FAILED") {
       await env.DB.prepare("UPDATE video_generation_jobs SET status='failed',error_code='provider_failed',updated_at=? WHERE id=?")
