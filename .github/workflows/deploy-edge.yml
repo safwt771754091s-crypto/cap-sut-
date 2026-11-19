@@ -51,7 +51,7 @@ jobs:
 
       - name: Apply D1 migrations
         working-directory: apps/edge
-        run: npx wrangler d1 migrations apply capsut-production --remote --yes
+        run: npx wrangler d1 migrations apply capsut-production --remote
 
       - name: Configure fal provider secret
         working-directory: apps/edge
