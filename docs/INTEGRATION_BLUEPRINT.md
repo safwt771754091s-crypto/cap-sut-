@@ -18,6 +18,12 @@ The Android phone is the control plane: create projects, submit jobs, inspect pr
 - Template/agent patterns: selectively adapt examples from awesome-llm-apps and the owner's video-template repository only after file-level license and dependency review.
 - Render core: FFmpeg-based deterministic rendering remains separate from generative inference.
 
+## Video watermark policy
+- Every free-plan MP4 export receives the server-applied `Made with Cap sut` watermark at bottom-right with 75% text opacity. The editor preview mirrors this default.
+- The watermark is burned into the FFmpeg video filter chain, not merely displayed as browser UI.
+- Paid-plan customization (text, logo, position) is resolved by the server only after authenticating the account and checking its entitlement. Never trust a client-supplied `isPaid` flag or watermark-removal request.
+- The render worker must provision a font with Arabic glyph coverage and set `CAPSUT_WATERMARK_FONT` when the default DejaVu Sans path differs. Export must fail visibly rather than silently omit the watermark when the required drawtext/font capability is unavailable.
+
 ## Required service contracts
 Define a provider-neutral interface:
 - createImage(request) -> job

@@ -15,6 +15,8 @@
 - Save/open/autosave recovery
 - Real FFmpeg MP4 export
 
+- Embed mandatory “Made with Cap sut” watermark in MP4 exports (bottom-right, 75% opacity); paid-plan customization is server-entitlement gated.
+
 ## 2 Rendering platform
 - Render plan
 - Queue/status/progress/cancellation
