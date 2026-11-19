@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS video_generation_jobs (
   provider TEXT NOT NULL DEFAULT 'fal',
   provider_request_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'queued'
-    CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
+    CHECK (status IN ('queued', 'running', 'finalizing', 'succeeded', 'failed')),
   status_url TEXT NOT NULL,
   response_url TEXT NOT NULL,
   prompt TEXT NOT NULL,
