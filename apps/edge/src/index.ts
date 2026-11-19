@@ -247,13 +247,13 @@ async function generateVideo(request: Request, env: Env): Promise<Response> {
   const day = new Date().toISOString().slice(0,10);
   const bucket = await sha256(`video:${user.id}:${day}`);
   if (!await rateLimit(env,bucket,3,24*60*60)) return json({ok:false,error:"وصلت إلى الحد التجريبي اليومي لتوليد الفيديو (3 فيديوهات). حاول غدًا."},429);
-  const model = env.FAL_VIDEO_MODEL || "fal-ai/wan/v2.2-a14b/text-to-video";
+  const model = env.FAL_VIDEO_MODEL || "fal-ai/wan/v2.7/text-to-video";
   let queued: {request_id?:string;status_url?:string;response_url?:string};
   try {
     const response = await fetch("https://queue.fal.run/" + model, {
       method:"POST",
       headers:{"Authorization":`Key ${env.FAL_KEY}`,"Content-Type":"application/json"},
-      body:JSON.stringify({prompt, resolution:"720p", aspect_ratio:"16:9"})
+      body:JSON.stringify({prompt, resolution:"720p", aspect_ratio:"16:9", duration:5, enable_safety_checker:true, enable_prompt_expansion:true})
     });
     const payload = await response.json() as typeof queued & {detail?:string;error?:string};
     if (!response.ok || !payload.request_id || !payload.status_url || !payload.response_url ||
