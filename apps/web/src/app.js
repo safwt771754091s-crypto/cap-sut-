@@ -262,4 +262,13 @@ async function exportProject() {
   alert("اكتمل التصيير. بدأ تنزيل ملف MP4.");
 }
 
+window.addEventListener("capsut:import-generated-video", event => {
+  const file = event.detail?.file;
+  if (!(file instanceof File) || !file.type.startsWith("video/")) {
+    alert("ملف الفيديو الناتج غير صالح.");
+    return;
+  }
+  importFile(file);
+});
+
 render();
