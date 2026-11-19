@@ -294,8 +294,9 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
       if (!videoUrl) throw new Error("provider returned no video");
       const download = await fetch(videoUrl);
       if (!download.ok) throw new Error("video download failed");
-      const contentType = download.headers.get("Content-Type") || result.video?.content_type || "video/mp4";
-      if (!contentType.startsWith("video/")) throw new Error("provider result is not a video");
+      const receivedType = download.headers.get("Content-Type") || result.video?.content_type || "";
+      const contentType = receivedType.startsWith("video/") ? receivedType : "video/mp4";
+      if (!videoUrl.toLowerCase().includes(".mp4") && !videoUrl.toLowerCase().includes(".webm") && !receivedType.startsWith("video/")) throw new Error("provider result is not a video");
       const bytes = await download.arrayBuffer();
       if (!bytes.byteLength || bytes.byteLength > 200*1024*1024) throw new Error("video file size is invalid");
       if (!env.MEDIA) return json({ok:false,error:"تخزين الفيديو غير مفعّل على الخادم."},503);
@@ -347,7 +348,7 @@ async function getAsset(request: Request, env: Env, assetId: string): Promise<Re
     headers:{
       "Content-Type":asset.mime_type,
       "Content-Length":String(asset.size_bytes),
-      "Content-Disposition":`attachment; filename="${asset.original_name.replace(/["\\\\]/g,"_")}"`,
+      "Content-Disposition":`inline; filename="${asset.original_name.replace(/["\\\\]/g,"_")}"`,
       "Cache-Control":"private, no-store"
     }
   });
