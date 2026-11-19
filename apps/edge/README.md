@@ -47,3 +47,16 @@ The Worker now includes a real asynchronous fal queue integration for text-to-vi
 - Optional model override: `FAL_VIDEO_MODEL` in Worker vars. Default: `fal-ai/wan/v2.7/text-to-video`.
 
 Provisioning is required before this feature can run: replace the D1 placeholder with the real database ID, create the named D1 database and R2 bucket, apply migrations remotely, set `FAL_KEY`, and deploy the Worker. The provider performs paid GPU inference; set a spending limit and review fal's current model pricing before enabling it for public users. GitHub Pages is only the static frontend, not the inference server. No video is generated when the provider secret or storage bindings are missing.
+
+## GitHub Actions deployment
+
+A manual production deployment workflow is available at **Actions → Deploy Cap sut Edge Worker → Run workflow**. Before running it, add these repository Actions secrets:
+
+- `CLOUDFLARE_API_TOKEN`: token with Workers Scripts edit, D1 edit, R2 read, and account access needed by Wrangler.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID.
+- `CAPSUT_D1_DATABASE_ID`: the UUID of the existing D1 database named `capsut-production`.
+- `FAL_KEY`: the fal API key. Do not put this value in source code or share it in chat.
+
+The R2 bucket `capsut-media` must already exist. The workflow substitutes the D1 ID at runtime, applies pending migrations, writes `FAL_KEY` as a Worker secret, and deploys `capsut-api`. It does not create or delete Cloudflare resources. Review fal billing and set provider-side spending limits before running production generation.
+
+The workflow is manual by design: pushing frontend changes does not deploy or alter the production Worker.
