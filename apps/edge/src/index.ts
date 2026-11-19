@@ -358,12 +358,13 @@ async function getVideoJob(request: Request, env: Env, jobId: string): Promise<R
       return json({ok:true,job_id:job.id,status:"succeeded",asset_id:assetId,asset_url:"/v1/assets/" + assetId,mime_type:contentType,file_name:"capsut-video-" + assetId + "." + extension});
     }
     if (statusBody.status === "FAILED") {
-      await env.DB.prepare("UPDATE video_generation_jobs SET status='failed',error_code='provider_failed',updated_at=? WHERE id=?")
-        .bind(new Date().toISOString(),job.id).run();
+      await env.DB.prepare("UPDATE video_generation_jobs SET status='failed',error_code='provider_failed',updated_at=? WHERE id=? AND owner_id=? AND status IN ('queued','running')")
+        .bind(new Date().toISOString(),job.id,user.id).run();
       return json({ok:true,job_id:job.id,status:"failed"});
     }
     const status = statusBody.status === "IN_PROGRESS" ? "running" : "queued";
-    await env.DB.prepare("UPDATE video_generation_jobs SET status=?,updated_at=? WHERE id=?").bind(status,new Date().toISOString(),job.id).run();
+    await env.DB.prepare("UPDATE video_generation_jobs SET status=?,updated_at=? WHERE id=? AND owner_id=? AND status IN ('queued','running')")
+      .bind(status,new Date().toISOString(),job.id,user.id).run();
     return json({ok:true,job_id:job.id,status});
   } catch {
     await env.DB.prepare("UPDATE video_generation_jobs SET status='running',updated_at=? WHERE id=? AND owner_id=? AND status='finalizing'")
