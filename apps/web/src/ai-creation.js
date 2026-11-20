@@ -155,7 +155,13 @@ async function generate() {
     download.download = "capsut-generated-image.jpg";
     download.textContent = "تنزيل الصورة";
     result.append(download);
-    setStatus("نجح توليد الصورة من Cloudflare Workers AI.");
+    const assetId = response.headers.get("X-CapSut-Asset-ID");
+    if (assetId) {
+      setStatus("نجح توليد الصورة وحُفظت في مكتبة أصول حسابك.");
+      await loadGeneratedAssets();
+    } else {
+      setStatus("نجح توليد الصورة، لكن التخزين الدائم غير مفعّل على الخادم؛ نزّلها الآن حتى لا تفقدها.");
+    }
   } catch (error) {
     setStatus("لم يكتمل التوليد: " + error.message + ". تأكد من تسجيل الدخول ونشر خادم Cap sut وتفعيل AI binding.");
   } finally { busy = false; button.disabled = false; }
