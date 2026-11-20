@@ -6,6 +6,7 @@ export interface Env {
   SESSION_TTL_SECONDS?: string;
   FAL_KEY?: string;
   FAL_VIDEO_MODEL?: string;
+  FAL_IMAGE_VIDEO_MODEL?: string;
 }
 
 const PASSWORD_ITERATIONS = 310_000;
@@ -241,19 +242,60 @@ async function generateVideo(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return json({ok:false,error:"سجّل الدخول لاستخدام توليد الفيديو."},401);
   if (!env.FAL_KEY) return json({ok:false,error:"مزود توليد الفيديو غير مضبوط بعد على الخادم (FAL_KEY). لم يتم إنشاء فيديو وهمي."},503);
-  const body = await readBody(request);
-  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  if (!body || prompt.length < 8 || prompt.length > 1200) return json({ok:false,error:"اكتب وصف فيديو بين 8 و1200 حرف."},400);
+
+  let prompt = "";
+  let imageDataUri: string | null = null;
+  const contentType = request.headers.get("Content-Type") || "";
+  if (contentType.toLowerCase().includes("multipart/form-data")) {
+    const declaredLength = Number(request.headers.get("Content-Length") || "0");
+    if (declaredLength > 21 * 1024 * 1024) return json({ok:false,error:"حجم الصورة يتجاوز 20 ميجابايت."},413);
+    let form: FormData;
+    try { form = await request.formData(); } catch { return json({ok:false,error:"تعذر قراءة ملف الصورة المرفق."},400); }
+    prompt = typeof form.get("prompt") === "string" ? String(form.get("prompt")).trim() : "";
+    const image = form.get("image");
+    if (!(image instanceof File) || image.size < 1 || image.size > 20 * 1024 * 1024) {
+      return json({ok:false,error:"أرفق صورة صالحة لا يتجاوز حجمها 20 ميجابايت."},400);
+    }
+    const allowedTypes = ["image/jpeg","image/png","image/webp","image/bmp"];
+    if (!allowedTypes.includes(image.type.toLowerCase())) {
+      return json({ok:false,error:"صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP أو BMP."},415);
+    }
+    const bytes = new Uint8Array(await image.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+    }
+    imageDataUri = `data:${image.type.toLowerCase()};base64,${btoa(binary)}`;
+  } else {
+    const body = await readBody(request);
+    prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    if (!body) return json({ok:false,error:"بيانات طلب الفيديو غير صالحة."},400);
+  }
+  if (prompt.length < 8 || prompt.length > 1200) return json({ok:false,error:"اكتب وصف فيديو بين 8 و1200 حرف."},400);
+
   const day = new Date().toISOString().slice(0,10);
   const bucket = await sha256(`video:${user.id}:${day}`);
   if (!await rateLimit(env,bucket,3,24*60*60)) return json({ok:false,error:"وصلت إلى الحد التجريبي اليومي لتوليد الفيديو (3 فيديوهات). حاول غدًا."},429);
-  const model = env.FAL_VIDEO_MODEL || "fal-ai/wan/v2.7/text-to-video";
+
+  const model = imageDataUri
+    ? (env.FAL_IMAGE_VIDEO_MODEL || "fal-ai/wan/v2.7/image-to-video")
+    : (env.FAL_VIDEO_MODEL || "fal-ai/wan/v2.7/text-to-video");
+  const input: Record<string, unknown> = {
+    prompt,
+    resolution:"720p",
+    aspect_ratio:"16:9",
+    duration:5,
+    enable_safety_checker:true,
+    enable_prompt_expansion:true
+  };
+  if (imageDataUri) input.image_url = imageDataUri;
+
   let queued: {request_id?:string;status_url?:string;response_url?:string};
   try {
     const response = await fetch("https://queue.fal.run/" + model, {
       method:"POST",
       headers:{"Authorization":`Key ${env.FAL_KEY}`,"Content-Type":"application/json"},
-      body:JSON.stringify({prompt, resolution:"720p", aspect_ratio:"16:9", duration:5, enable_safety_checker:true, enable_prompt_expansion:true})
+      body:JSON.stringify(input)
     });
     const payload = await response.json() as typeof queued & {detail?:string;error?:string};
     if (!response.ok || !payload.request_id || !payload.status_url || !payload.response_url ||
@@ -270,8 +312,8 @@ async function generateVideo(request: Request, env: Env): Promise<Response> {
     VALUES (?,?, 'fal', ?, 'queued', ?, ?, ?)`)
     .bind(id,user.id,queued.request_id,queued.status_url,queued.response_url,prompt).run();
   await env.DB.prepare("INSERT INTO usage_events (id,owner_id,event_type,quantity,metadata_json) VALUES (?,?,'video.queued',1,?)")
-    .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",model,job_id:id})).run();
-  return json({ok:true,job_id:id,status:"queued"},202);
+    .bind(crypto.randomUUID(),user.id,JSON.stringify({provider:"fal",model,mode:imageDataUri?"image-to-video":"text-to-video",job_id:id})).run();
+  return json({ok:true,job_id:id,status:"queued",mode:imageDataUri?"image-to-video":"text-to-video"},202);
 }
 
 function isFalQueueUrl(value: string): boolean {

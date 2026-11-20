@@ -39,11 +39,19 @@ The binding is declared in `wrangler.toml` as `[ai]`. Generated images are also 
 
 The Worker now includes a real asynchronous fal queue integration for text-to-video:
 
-- `POST /v1/generate/video` submits a prompt (8–1200 characters), five-second duration, 720p resolution for `fal-ai/wan/v2.7/text-to-video`.
+- `POST /v1/generate/video` accepts JSON with a prompt for text-to-video, or multipart form data with `prompt` and `image` fields for image-to-video.
+- Image uploads are limited to 20 MB and JPG, PNG, WEBP, or BMP. The Worker sends the image as a data URI to `fal-ai/wan/v2.7/image-to-video`; no public image URL or public R2 bucket is required.
 - `GET /v1/generate/video/:job_id` checks the provider queue, downloads a completed MP4/WebM to the private R2 bucket, and records it as an owner-scoped asset in D1.
 - `GET /v1/assets` lists the signed-in user's ready assets; `GET /v1/assets/:asset_id` streams only that user's asset.
 - Each account is limited to three video submissions per UTC day. Downloads are streamed and capped at 100 MB. Provider queue and media URLs are host-validated before fetching.
 - The browser never receives the fal API key. Store it as a Worker secret: `npx wrangler secret put FAL_KEY`.
-- Optional model override: `FAL_VIDEO_MODEL` in Worker vars. Default: `fal-ai/wan/v2.7/text-to-video`.
+- Model variables: `FAL_VIDEO_MODEL` defaults to `fal-ai/wan/v2.7/text-to-video`; `FAL_IMAGE_VIDEO_MODEL` defaults to `fal-ai/wan/v2.7/image-to-video`.
 
 Provisioning is required before this feature can run: replace the D1 placeholder with the real database ID, create the named D1 database and R2 bucket, apply migrations remotely, set `FAL_KEY`, and deploy the Worker. The provider performs paid GPU inference; set a spending limit and review fal's current model pricing before enabling it for public users. GitHub Pages is only the static frontend, not the inference server. No video is generated when the provider secret or storage bindings are missing.
+
+
+## Image-to-video browser flow
+
+The AI Studio's video tab now supports either a text-only prompt or an uploaded still image plus a motion prompt. The browser sends multipart form data for image requests and JSON for text-only requests. The Worker validates MIME type and size, authenticates the account, applies the existing per-user daily video quota, submits to the fal queue, and stores completed output in the owner's private R2 library. The fal API key remains a Cloudflare Worker secret.
+
+The image-to-video model accepts `image_url` as a URL or base64 data URI. This implementation uses a data URI so the source image does not need to be exposed through a public bucket. Review fal's current per-second model pricing and set account spending limits before enabling public generation.

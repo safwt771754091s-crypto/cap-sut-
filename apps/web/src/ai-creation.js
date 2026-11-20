@@ -33,6 +33,7 @@ function openAIStudio() {
       </div>
       <div class="ai-studio-tabs"><button data-mode="image" class="active">نص ← صورة</button><button data-mode="video">نص ← فيديو</button></div>
       <label class="ai-studio-field" id="ai-studio-prompt-label">اكتب وصف الصورة<textarea id="ai-studio-prompt" rows="5" maxlength="1200" placeholder="مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…"></textarea></label>
+      <label class="ai-studio-field" id="ai-studio-image-field" hidden>الصورة التي تريد تحويلها إلى فيديو<input id="ai-studio-image" type="file" accept="image/jpeg,image/png,image/webp,image/bmp"><small>اختياري: أرفق صورة لتحريكها. JPG أو PNG أو WEBP أو BMP، بحد أقصى 20 ميجابايت.</small></label>
       <label class="ai-studio-field">جودة الصورة<select id="ai-studio-quality"><option value="4">سريعة — 4 خطوات</option><option value="8">أعلى جودة — 8 خطوات</option></select></label>
       <div class="ai-studio-status" id="ai-studio-status">أدخل رابط خادم API وسجّل الدخول لبدء توليد الصور.</div>
       <div id="ai-studio-result" class="ai-studio-result"></div>
@@ -89,8 +90,15 @@ function setMode(next) {
     ? "مثال: لقطة سينمائية لطائرة تحلق فوق جبال اليمن عند الشروق، حركة كاميرا سلسة وتفاصيل واقعية…" 
     : "مثال: مشهد سينمائي لمدينة صنعاء القديمة وقت الغروب، إضاءة ذهبية وتفاصيل واقعية…";
   if (quality) quality.hidden = mode === "video";
+  const imageField = panel.querySelector("#ai-studio-image-field");
+  if (imageField) imageField.hidden = mode !== "video";
+  const imageInput = panel.querySelector("#ai-studio-image");
+  if (imageInput) imageInput.onchange = () => {
+    const file = imageInput.files?.[0];
+    if (file) setStatus("تم اختيار الصورة: " + file.name + ". سيُنشأ الفيديو انطلاقًا منها مع وصفك النصي.");
+  };
   setStatus(mode === "video"
-    ? "يُنشأ الفيديو عبر مزود GPU خارجي. يلزم ضبط FAL_KEY على الخادم، وقد تُحتسب تكلفة لكل عملية."
+    ? "يمكنك إنشاء فيديو من وصف نصي فقط، أو إرفاق صورة لتحريكها إلى فيديو. يتطلب ذلك ضبط FAL_KEY على الخادم، وقد تُحتسب تكلفة للمزوّد."
     : "توليد الصور متاح عند تفعيل Cloudflare Workers AI على الخادم.");
 }
 
@@ -272,10 +280,26 @@ async function generateVideo() {
   result.replaceChildren();
   setStatus("جارٍ إرسال مهمة الفيديو إلى مزود التوليد…");
   try {
+    const imageFile = panel.querySelector("#ai-studio-image")?.files?.[0] || null;
+    let requestBody;
+    const headers = {};
+    if (imageFile) {
+      if (!["image/jpeg","image/png","image/webp","image/bmp"].includes(imageFile.type)) {
+        throw new Error("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP أو BMP.");
+      }
+      if (imageFile.size > 20 * 1024 * 1024) throw new Error("حجم الصورة يتجاوز 20 ميجابايت.");
+      requestBody = new FormData();
+      requestBody.append("prompt",prompt);
+      requestBody.append("image",imageFile,imageFile.name);
+      setStatus("جارٍ رفع الصورة وإرسال مهمة تحويلها إلى فيديو…");
+    } else {
+      headers["Content-Type"] = "application/json";
+      requestBody = JSON.stringify({prompt});
+    }
     const response = await fetch(base + "/v1/generate/video", {
       method:"POST", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt})
+      headers,
+      body:requestBody
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || ("HTTP " + response.status));

@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "project": "Cap sut",
+  "policy": "Integrate through isolated adapters; do not copy entire upstream repositories into the editor runtime.",
+  "sources": [
+    {
+      "id": "openmontage",
+      "repository": "https://github.com/safwt771754091s-crypto/OpenMontage",
+      "upstream": "https://github.com/calesthio/OpenMontage",
+      "license": "AGPL-3.0",
+      "role": "agentic-video-production",
+      "integration": "isolated-service-adapter",
+      "planned_capabilities": [
+        "research-and-script",
+        "scene-planning",
+        "asset-orchestration",
+        "timeline-composition",
+        "render-pipeline"
+      ],
+      "status": "reference-selected-license-review-required"
+    },
+    {
+      "id": "bitnet",
+      "repository": "https://github.com/safwt771754091s-crypto/BitNet",
+      "upstream": "https://github.com/microsoft/BitNet",
+      "license": "MIT",
+      "role": "local-llm-inference",
+      "integration": "optional-local-inference-service",
+      "planned_capabilities": [
+        "prompt-assistance",
+        "script-drafting",
+        "agent-planning",
+        "offline-capable-text-inference"
+      ],
+      "status": "reference-selected-hardware-and-model-validation-required"
+    },
+    {
+      "id": "everything",
+      "repository": "https://github.com/safwt771754091s-crypto/everything",
+      "upstream": "https://github.com/HeyPuter/everything",
+      "license": "MIT",
+      "role": "creative-and-productivity-app-catalog",
+      "integration": "selective-app-adapters",
+      "planned_capabilities": [
+        "creative-tools-discovery",
+        "documents",
+        "presentations",
+        "media-adjacent-tools"
+      ],
+      "status": "reference-selected-per-app-security-and-license-review-required"
+    }
+  ]
+}
